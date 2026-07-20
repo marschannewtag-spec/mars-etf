@@ -43,9 +43,10 @@ input,select{background:#0d1526;border:1px solid var(--line);color:var(--tx);bor
 label{font-size:12px;color:var(--mut);display:block;margin:10px 0 4px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .sug{border-left:3px solid var(--ok);background:#0e1a2e;padding:10px 12px;margin:8px 0;border-radius:0 8px 8px 0;font-size:13.5px}
-.sug.sell{border-color:var(--risk)}.sug.hold{border-color:var(--mut);color:var(--mut)}
+.sug.sell{border-color:var(--risk)}.sug.hold{border-color:var(--mut);color:var(--mut)}.sug.block{border-color:var(--warn);color:var(--warn)}
 .log{font-size:12px;color:var(--mut);border-bottom:1px dashed var(--line);padding:7px 0;font-family:var(--mono)}
 .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;border:1px solid var(--line);color:var(--mut);margin-left:6px}
+.note{font-size:11px;color:var(--mut);margin-top:8px}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#22304e;padding:10px 18px;border-radius:10px;display:none;font-size:13px;z-index:9}
 @media(max-width:520px){.hero{flex-direction:column}#col{width:100%;height:120px}}
 </style></head>
@@ -70,6 +71,7 @@ label{font-size:12px;color:var(--mut);display:block;margin:10px 0 4px}
     <div class="kv"><span>SPX vs 12月SMA</span><b id="vSMA">—</b></div>
     <div class="kv"><span>VIX / 門檻 32</span><b id="vVIX">—</b></div>
     <div class="kv"><span>USD/TWD</span><b id="vFX">—</b></div>
+    <div class="kv"><span>市場資料日期</span><b id="vAsof">—</b></div>
   </div></div></section>
 
 <section><h2>持倉 · 5 曝險 + 現金</h2>
@@ -84,23 +86,27 @@ label{font-size:12px;color:var(--mut);display:block;margin:10px 0 4px}
 <tr><td>2015–2026</td><td>CAGR ~20% · MaxDD -36%</td></tr>
 <tr><td>4年虧損機率</td><td>~13%(MC 5000 路徑)</td></tr></tbody></table>
 <div style="margin-top:10px"><button class="sec" id="btnMC">用目前投入額跑 4 年 Monte Carlo</button></div>
-<div id="mcOut" class="mono" style="margin-top:10px;font-size:13px"></div></section>
+<div id="mcOut" class="mono" style="margin-top:10px;font-size:13px"></div>
+<div class="note">D_RETS 出處:STEP 3b 全保真引擎月報酬 1990-07~2026-07(432 筆;參數 基準20/防禦50/減碼上限50/VIX32/SMA12;由 full3b.py 產生,可重現)。</div></section>
 
-<section><h2>設定 · 初始化</h2>
+<section><h2>設定 · 初始化 · 維護</h2>
 <label>Worker 網址</label><input id="cfgW">
 <div class="grid2"><div><label>投入金額(萬)</label><input id="cfgCap" type="number" placeholder="100"></div>
 <div><label>幣別</label><select id="cfgCcy"><option>TWD</option><option>USD</option></select></div></div>
-<label>各標的持有數(股;首次可按下方按鈕由引擎建議)</label>
+<label>各標的持有數(股)</label>
 <div class="grid2" id="unitBox"></div>
 <div class="grid2" style="margin-top:6px"><div><label>現金 TWD(萬)</label><input id="cashTWD" type="number" value="0"></div>
 <div><label>現金 USD</label><input id="cashUSD" type="number" value="0"></div></div>
-<div style="margin-top:12px" class="grid2"><button class="sec" id="btnInit">產生初始建倉清單</button><button class="sec" id="btnSave">儲存設定</button></div></section>
+<div style="margin-top:12px" class="grid2"><button class="sec" id="btnInit">產生初始建倉清單</button><button class="sec" id="btnSave">儲存設定</button></div>
+<div style="margin-top:8px" class="grid2"><button class="sec" id="btnImport">匯入紀錄 JSON</button><button class="sec" id="btnResetPeak">重設峰值/分層(入金・分割後)</button></div>
+<input type="file" id="impFile" accept="application/json" hidden></section>
 
 <section><h2>Changelog</h2><div id="logBox"></div>
 <div style="margin-top:10px"><button class="sec" id="btnExport">匯出紀錄 JSON</button></div></section>
 
 <div id="toast"></div>
 <script>
+"use strict";
 const D_RETS=[-0.202191, -0.15421, 0.058784, 0.122059, 0.015082, 0.10171, 0.155972, 0.0238, 0.010674, 0.03, -0.114389, 0.071707, 0.005701, 0.013137, -0.000609, -0.063251, 0.170326, 0.052657, 0.01367, -0.021859, -0.079086, 0.004245, -0.07001, -0.000792, -0.020651, 0.016877, 0.020056, 0.058392, -0.004357, 0.016386, 0.011285, 0.046287, -0.045907, 0.057916, -0.027743, -0.022311, 0.064683, 0.004516, 0.025809, -0.008384, 0.131644, 0.091507, -0.035005, -0.102505, -0.000367, 0.021408, -0.028057, 0.034334, 0.051195, -0.036229, 0.028004, -0.050814, 0.014356, -0.037978, 0.049422, 0.01808, 0.029751, 0.02897, 0.06442, 0.079222, 0.008319, 0.027776, 0.000776, 0.002217, 0.012116, 0.012795, 0.049557, 0.003143, 0.145158, 0.024476, 0.002519, -0.099684, 0.035663, 0.11771, 0.002155, 0.119765, -0.026286, 0.126288, -0.04107, -0.067036, 0.129015, 0.090377, 0.044489, 0.18471, -0.079757, 0.001676, -0.112987, 0.025594, -0.047149, 0.058539, 0.152107, 0.022037, -0.005724, -0.064418, 0.08836, 0.021726, -0.23299, 0.104758, 0.031678, 0.126957, 0.143009, 0.142702, -0.098267, 0.134216, 0.025032, -0.030953, 0.142322, -0.043803, 0.054438, -0.024336, 0.091247, 0.123288, 0.26262, -0.018111, 0.157966, 0.05027, -0.1841, -0.127249, 0.103584, -0.079127, 0.117628, -0.169546, -0.123601, -0.121891, -0.043302, 0.067123, -0.108077, -0.053628, 0.036234, -0.018857, -0.017541, -0.039157, -0.036548, -0.063124, 0.026358, 0.043574, 0.017918, -0.002216, -0.010646, 0.022905, -0.019934, -0.013019, -0.035786, -0.027075, -0.002008, -0.028627, 0.013642, 0.020996, -0.015541, 0.00261, -0.008325, -0.005676, 0.004688, 0.140979, 0.061127, 0.088241, 0.097575, -0.038309, 0.13173, -0.014986, 0.080127, 0.033048, 0.005753, -0.025394, -0.046255, 0.009532, 0.043907, -0.103804, -0.015413, 0.034867, 0.045491, 0.087295, 0.069417, -0.082645, 0.01714, -0.044269, -0.078134, 0.115896, -0.01184, 0.093661, -0.018205, 0.047479, -0.046138, 0.120684, 0.022739, 0.056157, -0.026476, 0.047042, 0.02004, -0.122297, -0.012022, -0.050449, 0.074122, 0.06234, 0.064978, 0.0616, 0.002451, 0.021493, -0.029126, 0.00192, 0.074912, 0.056851, 0.016726, -0.006459, 0.009298, 0.076476, 0.090604, -0.103412, -0.006616, -0.103327, -0.016875, -0.005834, 0.058765, 0.023337, -0.088037, -0.005402, 0.003327, -0.106071, -0.110076, -0.043538, 0.008665, -0.024934, -0.021982, 0.038563, 0.052394, 0.032614, 0.000537, 0.04166, 0.002993, 0.072903, -0.06283, 0.069872, 0.099796, -0.104092, 0.034419, 0.131407, 0.020647, -0.144605, -0.045572, 0.054353, -0.085828, 0.109472, 0.06123, 0.00547, 0.087684, 0.023118, 0.024177, -0.017887, 0.037621, -0.030051, -0.033188, -8.4e-05, -0.115786, -0.049254, 0.086998, -0.037057, -0.004238, 0.068879, 0.115009, 0.054147, -0.043362, -0.125607, 0.061257, -0.000541, 0.056794, 0.030499, -0.076235, 0.036351, 0.020067, 0.063581, 0.006237, 0.053999, 0.056154, 0.032981, -0.034447, 0.063182, -0.026619, 0.072399, 0.067734, 0.053182, 0.047524, -0.050863, 0.057832, -0.011111, -0.010818, 0.059158, 0.04803, 0.008086, 0.052143, -0.012995, 0.035317, 0.063931, -0.024962, -0.017643, 0.09558, -0.02737, 0.020229, 0.029992, -0.039606, 0.032767, -0.107858, -0.027555, 0.092062, -0.000636, -0.027711, -0.060232, -0.019406, 0.057477, -0.035792, 0.048827, -0.036277, 0.088372, 0.00973, 0.009332, -0.008722, 0.012444, 0.020548, 0.053392, 0.055751, 0.01716, 0.030371, 0.046532, -0.009644, 0.041966, 0.012164, 0.003634, 0.074233, 0.024137, 0.010158, 0.107064, -0.044562, -0.05207, 0.012377, 0.053197, 0.008293, 0.044703, 0.066968, 0.000105, -0.131775, 0.007305, -0.120329, 0.066077, 0.026839, 0.044507, 0.070331, -0.111474, 0.055381, 0.01621, -0.038327, 0.024156, 0.061015, 0.045984, 0.050994, 0.008129, -0.102219, -0.099287, 0.126543, 0.047851, 0.075923, 0.09682, 0.129197, -0.071644, -0.040058, 0.113432, 0.075736, -0.00373, 0.016866, 0.025894, 0.072194, -0.01181, 0.065659, 0.013738, 0.05709, -0.055197, 0.076612, 0.002187, 0.038246, -0.103679, -0.0548, 0.034992, -0.14882, -0.007833, -0.078598, 0.082202, -0.029054, -0.086637, 0.03595, 0.047931, -0.065762, 0.059895, -0.017856, 0.056958, 0.006109, 0.085667, 0.090336, 0.039996, -0.037271, -0.068757, -0.041991, 0.097279, 0.067006, 0.031805, 0.086978, 0.038093, -0.060653, 0.070723, 0.092893, -0.018852, 0.011304, 0.020899, -0.00965, 0.048605, 0.004032, 0.026292, -0.049632, -0.102985, 0.005965, 0.073144, 0.088474, 0.03463, 0.022757, 0.079624, 0.10996, -0.026877, -0.000103, 0.041798, 0.018119, -0.116444, 0.250547, 0.152762, 0.00984, -0.086416];
 const INST=[
  {id:"00670L",name:"富邦NASDAQ正2",tgt:0.30,src:"tw"},
@@ -109,59 +115,87 @@ const INST=[
  {id:"00631L",name:"元大台灣50正2",tgt:0.10,src:"tw"},
  {id:"00640L",name:"富邦日本正2",tgt:0.10,src:"tw"},
  {id:"00653L",name:"富邦印度正2",tgt:0.05,src:"tw"}];
-const P={BASE:.20,DEF:.50,CAP:.50,T30:-.30,T40:-.40,T50:-.50,DRIFT:.25,PREM:1.0};
-const S=JSON.parse(localStorage.getItem("etf2x")||"{}");
-S.units=S.units||{};S.prem=S.prem||{};S.log=S.log||[];S.peak=S.peak||0;S.tierTc=S.tierTc||P.BASE;
+const P={BASE:.20,DEF:.50,CAP:.50,T30:-.30,DRIFT:.25,PREM:1.0,STALE:4,
+ LADDER:[[-.50,.05],[-.40,.10]],REARM:.05};
+/* ---- 狀態載入防護(Council ⑤)---- */
+let S;
+try{S=JSON.parse(localStorage.getItem("etf2x")||"{}")}catch(e){
+  try{localStorage.setItem("etf2x.corrupt."+Date.now(),localStorage.getItem("etf2x"))}catch(_){ }
+  S={};setTimeout(function(){toast("儲存資料毀損,已隔離備份並以預設值啟動")},0);
+}
+if(!S||typeof S!=="object"||Array.isArray(S))S={};
+S.units=S.units||{};S.prem=S.prem||{};S.log=S.log||[];S.peak=Number.isFinite(S.peak)?S.peak:0;
+S.tierTc=Number.isFinite(S.tierTc)?S.tierTc:P.BASE;
 S.worker=S.worker||"https://green-term-c0ddetf2x-worker.marschannewtag.workers.dev";
 const $=function(id){return document.getElementById(id)};
-const fmt=function(n,d){d=d||0;return n==null?"—":n.toLocaleString("zh-TW",{maximumFractionDigits:d,minimumFractionDigits:d})};
-const toast=function(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(function(){t.style.display="none"},2600)};
+const fin=function(x){return Number.isFinite(x)&&x>0};
+const fmt=function(n,d){d=d||0;return Number.isFinite(n)?n.toLocaleString("zh-TW",{maximumFractionDigits:d,minimumFractionDigits:d}):"—"};
+function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(function(){t.style.display="none"},2800)}
 const save=function(){localStorage.setItem("etf2x",JSON.stringify(S))};
-const log=function(m){S.log.unshift(new Date().toISOString().slice(0,16).replace("T"," ")+" · "+m);S.log=S.log.slice(0,200);save();renderLog()};
+const log=function(m){S.log.unshift(new Date().toISOString().slice(0,16).replace("T"," ")+" · "+m);S.log=S.log.slice(0,500);save();renderLog()};
 let Q={px:{},fx:null,sig:null};
 
 function initUI(){
   $("cfgW").value=S.worker; $("cfgCap").value=S.cap?S.cap/10000:""; $("cfgCcy").value=S.ccy||"TWD";
   $("cashTWD").value=(S.cashTWD||0)/10000; $("cashUSD").value=S.cashUSD||0;
   $("unitBox").innerHTML=INST.map(function(i){return '<div><label>'+i.id+'</label><input data-u="'+i.id+'" type="number" value="'+(S.units[i.id]||0)+'"></div>'}).join("");
-  $("stamp").textContent=new Date().toISOString().slice(0,10);
+  $("stamp").textContent=new Date(Date.now()+8*3600e3).toISOString().slice(0,10);
   renderLog();
 }
 function readUI(){
   S.worker=$("cfgW").value.trim().replace(/\/+$/,"");S.cap=(+$("cfgCap").value||0)*10000;S.ccy=$("cfgCcy").value;
   S.cashTWD=(+$("cashTWD").value||0)*10000;S.cashUSD=+$("cashUSD").value||0;
-  document.querySelectorAll("[data-u]").forEach(function(e){S.units[e.dataset.u]=+e.value||0});save();
+  document.querySelectorAll("[data-u]").forEach(function(e){S.units[e.dataset.u]=Math.max(0,Math.floor(+e.value||0))});save();
 }
-async function j(p){const r=await fetch(S.worker+p);if(!r.ok)throw p+" "+r.status;return r.json()}
+async function j(p){const r=await fetch(S.worker+p,{signal:AbortSignal.timeout(15000)});if(!r.ok)throw p+" "+r.status;return r.json()}
+function sanad(x){return fin(x)?x:null}
 async function fetchAll(){
   Q.sig=await j("/signal");
-  Q.fx=(await j("/fx")).last[1];
+  Q.fx=sanad((await j("/fx")).last[1]);
   for(const i of INST){
+    Q.px[i.id]=null;
     try{
       if(i.src==="tw"){const d=await j("/tw?no="+i.id);
-        Q.px[i.id]=(d.realtime&&d.realtime.price)?+d.realtime.price:(d.month_daily.length?d.month_daily[d.month_daily.length-1][1]:null);
-        if(Q.px[i.id]==null){const y=await j("/quotes?symbols="+i.id+".TW");Q.px[i.id]=y[i.id+".TW"].last[1];}}
-      else{const y=await j("/quotes?symbols="+i.id);Q.px[i.id]=y[i.id].last[1];}
+        let p=(d.realtime&&d.realtime.price!=null)?+d.realtime.price:NaN;
+        if(!fin(p)&&d.month_daily&&d.month_daily.length)p=+d.month_daily[d.month_daily.length-1][1];
+        if(!fin(p)){const y=await j("/quotes?symbols="+i.id+".TW");p=+y[i.id+".TW"].last[1];}
+        Q.px[i.id]=sanad(p);
+      }else{const y=await j("/quotes?symbols="+i.id);Q.px[i.id]=sanad(+y[i.id].last[1]);}
     }catch(e){Q.px[i.id]=null}
   }
 }
-function valTWD(i){const p=Q.px[i.id];if(p==null)return null;const u=S.units[i.id]||0;return i.src==="us"?u*p*Q.fx:u*p}
+function pxTWD(i){const p=Q.px[i.id];if(!fin(p))return null;return i.src==="us"?(fin(Q.fx)?p*Q.fx:null):p}
+function valTWD(i){const pt=pxTWD(i);if(pt==null)return null;const r=(S.units[i.id]||0)*pt;return Number.isFinite(r)?r:null}
 function totals(){
   let inv=0,miss=false;
-  for(const i of INST){const v=valTWD(i);if(v==null){miss=true;continue}inv+=v}
-  const cash=(S.cashTWD||0)+(S.cashUSD||0)*Q.fx, V=inv+cash;
+  for(const i of INST){const v=valTWD(i);if(v==null){if((S.units[i.id]||0)>0)miss=true;continue}inv+=v}
+  const cash=(S.cashTWD||0)+((S.cashUSD||0)*(fin(Q.fx)?Q.fx:0)), V=inv+cash;
   return{inv:inv,cash:cash,V:V,miss:miss};
 }
-function render(){
+/* ---- 分層目標:降階即時,回補需遲滯(Council P1-1 附帶缺陷)---- */
+function tierTarget(dd,prev){
+  let want=P.BASE;
+  for(const a of P.LADDER){if(dd<=a[0]){want=a[1];break}}
+  if(want>prev){
+    const cur=P.LADDER.find(function(a){return a[1]===prev});
+    if(cur&&dd<=cur[0]+P.REARM)return prev;
+  }
+  return want;
+}
+/* ---- render:mutate=true 才允許變更持久化風控狀態(Council P0-1)---- */
+function render(mutate){
   const s=Q.sig,t=totals(),V=t.V,cash=t.cash;
   const risk=s.risk_flag;
   $("lamp").className=risk?"risk":"ok";
   $("lampTitle").textContent=risk?"風險期 — 凍結投入,僅允許減碼":"正常期 — 依三層引擎執行";
   $("lampSub").textContent="SPX "+fmt(s.spx.last)+(s.spx.below?" 破":" > ")+"SMA "+fmt(s.spx.sma12m)+" · VIX "+s.vix.last.toFixed(1)+(s.vix.above?" >32":" <32");
-  if(V>S.peak){S.peak=V;S.tierTc=P.BASE}
-  const dd=S.peak?V/S.peak-1:0;
-  if(dd<=P.T50)S.tierTc=Math.min(S.tierTc,.05);else if(dd<=P.T40)S.tierTc=Math.min(S.tierTc,.10);
-  save();
+  if(mutate&&!t.miss&&fin(V)&&fin(Q.fx)){
+    if(V>=S.peak){S.peak=V;S.tierTc=P.BASE}
+    const d0=S.peak?V/S.peak-1:0;
+    S.tierTc=tierTarget(d0,S.tierTc);
+    save();
+  }
+  const dd=(S.peak&&fin(V))?V/S.peak-1:0;
   const cf=V?cash/V:0, tc=S.tierTc;
   $("vTotal").textContent=fmt(V)+" TWD"+(t.miss?" ⚠部分報價缺":"");
   $("vCash").textContent=(cf*100).toFixed(1)+"% / "+(tc*100)+"%";
@@ -169,93 +203,121 @@ function render(){
   $("vTier").innerHTML=[[-.3,"-30"],[-.4,"-40"],[-.5,"-50"]].map(function(x){return dd<=x[0]?'<span class="wn">'+x[1]+'●</span>':x[1]+"○"}).join(" · ");
   $("vSMA").textContent=fmt(s.spx.last)+" / "+fmt(s.spx.sma12m);
   $("vVIX").textContent=s.vix.last.toFixed(2);
-  $("vFX").textContent=Q.fx?Q.fx.toFixed(3):"—";
+  $("vFX").textContent=fin(Q.fx)?Q.fx.toFixed(3):"—";
+  $("vAsof").textContent=(s.asof&&s.asof.spx)||"—";
   $("colfill").style.height=Math.min(cf*100,100)+"%";
   $("colTxt").textContent=(cf*100).toFixed(1)+"%";
   const tb=$("holdT").querySelector("tbody");
   let rows="";
   for(const i of INST){
-    const p=Q.px[i.id],v=valTWD(i),w=(V&&v!=null)?v/V:null;
+    const p=Q.px[i.id],v=valTWD(i),w=(fin(V)&&v!=null)?v/V:null;
     const tg=(1-tc)*i.tgt/0.8;
     const drift=(w!=null)&&Math.abs(w-tg)>P.DRIFT*tg;
     const prem=S.prem[i.id];
-    rows+="<tr><td>"+i.id+"<span class='pill'>"+(i.src==="us"?"複委託":"台股")+"</span></td><td>"+fmt(S.units[i.id]||0)+"</td><td>"+(p==null?"—":fmt(p,2))+"</td><td>"+(v==null?"—":fmt(v))+"</td><td class='"+(drift?"wn":"")+"'>"+(w==null?"—":(w*100).toFixed(1))+"/"+(tg*100).toFixed(1)+"</td><td>"+(i.src==="tw"?"<input style='width:58px;padding:3px' data-p='"+i.id+"' value='"+(prem==null?"":prem)+"' placeholder='%'>":"—")+"</td></tr>";
+    rows+="<tr><td>"+i.id+"<span class='pill'>"+(i.src==="us"?"複委託":"台股")+"</span></td><td>"+fmt(S.units[i.id]||0)+"</td><td>"+(fin(p)?fmt(p,2):"—")+"</td><td>"+(v==null?"—":fmt(v))+"</td><td class='"+(drift?"wn":"")+"'>"+(w==null?"—":(w*100).toFixed(1))+"/"+(tg*100).toFixed(1)+"</td><td>"+(i.src==="tw"?"<input style='width:58px;padding:3px' data-p='"+i.id+"' value='"+(prem==null?"":prem)+"' placeholder='%'>":"—")+"</td></tr>";
   }
   rows+="<tr><td>現金</td><td></td><td></td><td>"+fmt(cash)+"</td><td>"+(cf*100).toFixed(1)+"/"+(tc*100)+"</td><td>—</td></tr>";
   tb.innerHTML=rows;
   tb.querySelectorAll("[data-p]").forEach(function(e){e.onchange=function(){S.prem[e.dataset.p]=+e.value;save()}});
-  return{V:V,cash:cash,cf:cf,tc:tc,dd:dd,risk:risk};
+  return{V:V,cash:cash,cf:cf,tc:tc,dd:dd,risk:risk,miss:t.miss};
 }
-function suggest(st){
-  const out=[];const V=st.V,cash=st.cash,cf=st.cf,tc=st.tc,dd=st.dd,risk=st.risk;
-  if(risk){
-    if(cf<P.DEF){
-      const need=P.DEF*V-cash, hold=V-cash, sell=Math.min(need,P.CAP*hold);
-      out.push({t:"sell",m:"第三層減碼:賣出合計 "+fmt(sell)+" TWD,現金拉向 50%(單次上限=持股 50%)"});
-      for(const i of INST){const v=valTWD(i);if(v==null)continue;const amt=sell*v/hold;
-        const sh=i.src==="us"?amt/Q.fx/Q.px[i.id]:amt/Q.px[i.id];
-        out.push({t:"sell",m:i.id+" 賣出約 "+fmt(sh,i.src==="us"?1:0)+" 股(約 "+fmt(amt)+" TWD)"});}
-    }else out.push({t:"hold",m:"風險期且現金已達防禦水位——空手等待旗標熄滅,不投入、不再平衡"});
-    return out;
+/* ---- 單一計畫來源:建議清單與一鍵套用同源(Council P0-2)---- */
+function makePlan(st){
+  const V=st.V,cash=st.cash,cf=st.cf,tc=st.tc,dd=st.dd;
+  if(st.risk){
+    if(cf<P.DEF-0.001){
+      const hold=V-cash, sell=Math.min(P.DEF*V-cash,P.CAP*hold);
+      const units={},orders=[];let after=0;
+      for(const i of INST){
+        const pt=pxTWD(i),cur=S.units[i.id]||0;
+        if(pt==null){units[i.id]=cur;continue}
+        const nu=Math.floor(cur*pt*(1-sell/hold)/pt);
+        units[i.id]=nu;after+=nu*pt;
+        if(cur-nu>0)orders.push({m:i.id+" 賣出 "+fmt(cur-nu)+" 股(約 "+fmt((cur-nu)*pt)+" TWD)",side:"sell"});
+      }
+      return{orders:orders,units:units,cash:V-after,head:"第三層減碼:拉現金向 50%(單次上限=持股 50%)",headSide:"sell"};
+    }
+    return{hold:"風險期且現金已達防禦水位——空手等待旗標熄滅,不投入、不再平衡"};
   }
   let act=(dd<=P.T30&&cf>tc*1.05)||Math.abs(cf-tc)>P.DRIFT*tc;
   for(const i of INST){const v=valTWD(i);if(v==null)continue;const w=v/V,tg=(1-tc)*i.tgt/0.8;if(Math.abs(w-tg)>P.DRIFT*tg)act=true;}
-  if(!act){out.push({t:"hold",m:"全部在容忍帶內——本月無動作。論點檢核:逐檔確認否證條件未觸發即續抱"});return out}
-  for(const i of INST){const v=valTWD(i)||0,tg=(1-tc)*i.tgt/0.8*V,d=tg-v;
-    if(Math.abs(d)<V*0.005)continue;
-    const sh=i.src==="us"?d/Q.fx/Q.px[i.id]:d/Q.px[i.id];
-    const warn=(i.src==="tw"&&(S.prem[i.id]||0)>P.PREM&&d>0)?" ⚠溢價超標,考慮緩買或改買美股版":"";
-    out.push({t:d>0?"buy":"sell",m:i.id+(d>0?" 買入約 ":" 賣出約 ")+fmt(Math.abs(sh),i.src==="us"?1:0)+" 股(約 "+fmt(Math.abs(d))+" TWD)"+warn});}
-  out.push({t:"hold",m:"目標現金 "+(tc*100)+"%"+(dd<=P.T30?"(分層抄底作用中:回撤 "+(dd*100).toFixed(0)+"%)":"")});
-  return out;
-}
-function buildPlan(st){
-  const V=st.V,cash=st.cash,cf=st.cf,tc=st.tc,dd=st.dd;
-  if(st.risk){
-    if(cf<P.DEF){const need=P.DEF*V-cash,hold=V-cash,sell=Math.min(need,P.CAP*hold);
-      const u={};for(const i of INST){const v=valTWD(i)||0;const nv=v*(1-sell/hold);
-        u[i.id]=Math.max(0,Math.round(i.src==="us"?nv/Q.fx/Q.px[i.id]:nv/Q.px[i.id]));}
-      return{units:u,cash:cash+sell};}
-    return null;}
-  let act=(dd<=P.T30&&cf>tc*1.05)||Math.abs(cf-tc)>P.DRIFT*tc;
-  for(const i of INST){const v=valTWD(i);if(v==null)continue;const w=v/V,tg=(1-tc)*i.tgt/0.8;if(Math.abs(w-tg)>P.DRIFT*tg)act=true;}
-  if(!act)return null;
-  const u={};for(const i of INST){if(Q.px[i.id]==null)return null;const tgt=(1-tc)*i.tgt/0.8*V;
-    u[i.id]=Math.max(0,Math.round(i.src==="us"?tgt/Q.fx/Q.px[i.id]:tgt/Q.px[i.id]));}
-  return{units:u,cash:tc*V};
+  if(!act)return{hold:"全部在容忍帶內——本月無動作。論點檢核:逐檔確認否證條件未觸發即續抱"};
+  const units={},orders=[];let after=0;
+  for(const i of INST){
+    const pt=pxTWD(i),cur=S.units[i.id]||0;
+    if(pt==null){units[i.id]=cur;continue}
+    let nu=Math.floor((1-tc)*i.tgt/0.8*V/pt);
+    if(Math.abs(nu-cur)*pt<V*0.005)nu=cur;
+    units[i.id]=nu;after+=nu*pt;
+    if(nu!==cur){
+      const du=nu-cur;
+      const warn=(i.src==="tw"&&(S.prem[i.id]||0)>P.PREM&&du>0)?" ⚠溢價超標,考慮緩買或改買美股版":"";
+      orders.push({m:i.id+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))+" 股(約 "+fmt(Math.abs(du)*pt)+" TWD)"+warn,side:du>0?"buy":"sell"});
+    }
+  }
+  if(!orders.length)return{hold:"整數化後無需交易——本月無動作"};
+  return{orders:orders,units:units,cash:V-after,head:"再平衡至目標(現金 "+(tc*100)+"%"+(dd<=P.T30?",分層抄底作用中 dd "+(dd*100).toFixed(0)+"%":"")+")",headSide:"buy"};
 }
 function applyPlan(plan,tag){
   for(const k in plan.units)S.units[k]=plan.units[k];
-  S.cashTWD=Math.max(0,Math.round(plan.cash-(S.cashUSD||0)*Q.fx));
+  S.cashTWD=Math.max(0,Math.round(plan.cash-(S.cashUSD||0)*(fin(Q.fx)?Q.fx:0)));
   save();initUI();toast("持倉已自動套用");log("一鍵套用:"+tag);
   runCheck();
 }
+/* ---- 可交易性門檻(Council 最高槓桿修正)---- */
 async function runCheck(){
   readUI();$("btnCheck").disabled=true;$("btnCheck").textContent="抓價中…";
-  try{await fetchAll();const st=render();const sg=suggest(st);
-    let html=sg.map(function(x){return "<div class='sug "+(x.t==="sell"?"sell":x.t==="hold"?"hold":"")+"'>"+x.m+"</div>"}).join("");
-    const plan=buildPlan(st);
-    if(plan)html+="<div style='margin-top:10px'><button class='sec' id='btnApply'>已照單下單 → 一鍵套用持倉</button></div>";
+  try{
+    await fetchAll();
+    const bad=INST.filter(function(i){return !fin(Q.px[i.id])});
+    const today=new Date(Date.now()+8*3600e3).toISOString().slice(0,10);
+    const stale=(Q.sig.asof&&Q.sig.asof.spx)?Math.floor((Date.parse(today)-Date.parse(Q.sig.asof.spx))/864e5):99;
+    const blockers=[];
+    if(bad.length)blockers.push("報價缺失:"+bad.map(function(i){return i.id}).join("、"));
+    if(stale>P.STALE)blockers.push("市場資料過期 "+stale+" 天(asof "+(Q.sig.asof?Q.sig.asof.spx:"?")+")");
+    if(!fin(Q.fx))blockers.push("匯率無效");
+    if(blockers.length){
+      render(false);
+      $("sugBox").innerHTML=blockers.map(function(b){return "<div class='sug block'>⛔ "+b+"</div>"}).join("")
+        +"<div class='sug hold'>本次不產生任何下單建議,亦不更新峰值與分層狀態。稍後重試。</div>";
+      log("月檢中止:"+blockers.join(" / "));return;
+    }
+    const st=render(true);
+    const plan=makePlan(st);
+    let html="";
+    if(plan.hold)html="<div class='sug hold'>"+plan.hold+"</div>";
+    else{
+      html="<div class='sug "+(plan.headSide==="sell"?"sell":"")+"'>"+plan.head+"</div>"
+        +plan.orders.map(function(o){return "<div class='sug "+(o.side==="sell"?"sell":"")+"'>"+o.m+"</div>"}).join("")
+        +"<div style='margin-top:10px'><button class='sec' id='btnApply'>已照單下單 → 一鍵套用持倉</button></div>";
+    }
     $("sugBox").innerHTML=html;
-    if(plan)$("btnApply").onclick=function(){applyPlan(plan,"月檢建議")};
+    if(!plan.hold)$("btnApply").onclick=function(){applyPlan(plan,"月檢建議")};
     log("月檢:V="+fmt(st.V)+" 現金 "+(st.cf*100).toFixed(1)+"%/"+(st.tc*100)+"% dd "+(st.dd*100).toFixed(1)+"%"+(st.risk?" [風險期]":""));
   }catch(e){toast("失敗:"+e)}
-  $("btnCheck").disabled=false;$("btnCheck").textContent="執行月度檢查";
+  finally{$("btnCheck").disabled=false;$("btnCheck").textContent="執行月度檢查"}
 }
 $("btnCheck").onclick=runCheck;
+/* ---- 初始建倉:風險期閘門(Council P1-2)+ 推導現金 ---- */
 $("btnInit").onclick=async function(){
   readUI();if(!S.cap){toast("先填投入金額");return}
   $("btnInit").disabled=true;
-  try{await fetchAll();
+  try{
+    await fetchAll();
+    if(Q.sig.risk_flag){
+      $("sugBox").innerHTML="<div class='sug block'>⛔ 風險旗標亮著("+$("lampSub").textContent+")。規格 v2.1:風險期凍結投入——建倉清單暫停產生,等旗標熄滅再來。</div>";
+      log("初始建倉被風險閘門擋下");$("btnInit").disabled=false;return;
+    }
+    const bad=INST.filter(function(i){return !fin(Q.px[i.id])});
+    if(bad.length||!fin(Q.fx)){toast("報價不完整("+bad.map(function(i){return i.id}).join(",")+"),中止");$("btnInit").disabled=false;return}
     const capTWD=S.ccy==="USD"?S.cap*Q.fx:S.cap;
-    let html="";
-    for(const i of INST){const amt=capTWD*(1-P.BASE)*i.tgt/0.8;
-      const sh=i.src==="us"?amt/Q.fx/Q.px[i.id]:amt/Q.px[i.id];
-      html+="<div class='sug'>"+i.id+" 買入約 "+fmt(sh,i.src==="us"?1:0)+" 股(約 "+fmt(amt)+" TWD @ "+fmt(Q.px[i.id],2)+")</div>";}
-    html+="<div class='sug hold'>保留現金 "+fmt(capTWD*P.BASE)+" TWD(20%,TWD 定存/貨幣基金、USD 側 SGOV)</div>";
-    const plan0={units:{},cash:capTWD*P.BASE};
-    for(const i of INST){const amt=capTWD*(1-P.BASE)*i.tgt/0.8;
-      plan0.units[i.id]=Math.max(0,Math.round(i.src==="us"?amt/Q.fx/Q.px[i.id]:amt/Q.px[i.id]));}
+    const plan0={units:{},cash:0};let spend=0,html="";
+    for(const i of INST){const pt=pxTWD(i);
+      const sh=Math.floor(capTWD*(1-P.BASE)*i.tgt/0.8/pt);
+      plan0.units[i.id]=sh;spend+=sh*pt;
+      html+="<div class='sug'>"+i.id+" 買入 "+fmt(sh)+" 股(約 "+fmt(sh*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")</div>";}
+    plan0.cash=capTWD-spend;
+    html+="<div class='sug hold'>保留現金 "+fmt(plan0.cash)+" TWD(約 "+(plan0.cash/capTWD*100).toFixed(1)+"%,TWD 定存/貨幣基金、USD 側 SGOV)</div>";
     html+="<div style='margin-top:10px'><button class='sec' id='btnApplyInit'>套用清單到持倉(自動填入)</button></div>";
     $("sugBox").innerHTML=html;
     $("btnApplyInit").onclick=function(){applyPlan(plan0,"初始建倉")};
@@ -265,26 +327,46 @@ $("btnInit").onclick=async function(){
 };
 $("btnSave").onclick=function(){readUI();toast("已儲存")};
 $("btnMC").onclick=function(){
-  const cap=S.cap||1000000;const paths=3000,H=48,B=12,res=[];
+  const capTWD=S.ccy==="USD"?(fin(Q.fx)?S.cap*Q.fx:null):S.cap;
+  if(!capTWD){toast("USD 投入需先取得匯率(執行一次月檢)");return}
+  const paths=3000,H=48,B=12,res=[];
   for(let p=0;p<paths;p++){let v=1,n=0;
     while(n<H){const st=Math.floor(Math.random()*(D_RETS.length-B));
       for(let k=0;k<B&&n<H;k++,n++)v*=1+D_RETS[st+k];}
     res.push(v);}
   res.sort(function(a,b){return a-b});
   const q=function(x){return res[Math.floor(paths*x)]};
-  $("mcOut").innerHTML="4 年後(3000 路徑,取樣 1990–2026 定案引擎):<br>P5 "+fmt(cap*q(.05))+" · 中位 "+fmt(cap*q(.5))+" · P95 "+fmt(cap*q(.95))+" TWD<br>虧損機率 "+(res.filter(function(x){return x<1}).length/paths*100).toFixed(1)+"%";
-  log("MC:cap="+fmt(cap));
+  $("mcOut").innerHTML="4 年後(3000 路徑,取樣 1990–2026 定案引擎):<br>P5 "+fmt(capTWD*q(.05))+" · 中位 "+fmt(capTWD*q(.5))+" · P95 "+fmt(capTWD*q(.95))+" TWD<br>虧損機率 "+(res.filter(function(x){return x<1}).length/paths*100).toFixed(1)+"%";
+  log("MC:capTWD="+fmt(capTWD));
 };
 $("btnExport").onclick=function(){
   const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:"application/json"}));
   a.download="etf2x-changelog.json";a.click();
 };
+$("btnImport").onclick=function(){$("impFile").click()};
+$("impFile").onchange=function(){
+  const f=this.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=function(){
+    try{const o=JSON.parse(r.result);
+      if(!o||typeof o!=="object"||Array.isArray(o))throw "格式錯誤";
+      localStorage.setItem("etf2x",JSON.stringify(o));location.reload();
+    }catch(e){toast("匯入失敗:"+e)}
+  };r.readAsText(f);
+};
+$("btnResetPeak").onclick=function(){
+  if(!confirm("重設組合峰值與分層狀態?(大額入金、ETF 分割/反分割後使用)"))return;
+  S.peak=0;S.tierTc=P.BASE;save();toast("已重設,下次月檢重建峰值");log("維護:重設峰值與分層");
+};
 function renderLog(){$("logBox").innerHTML=S.log.slice(0,30).map(function(l){return "<div class='log'>"+l+"</div>"}).join("")||"<div class='log'>尚無紀錄</div>"}
 initUI();
-document.addEventListener("change",function(e){if(e.target.matches("input,select")&&!e.target.dataset.p)readUI()});
-(async function(){try{
-  Q.sig=await j("/signal");Q.fx=(await j("/fx")).last[1];render();
-  if(Object.keys(S.units).some(function(k){return S.units[k]>0}))runCheck();
-}catch(e){$("lampTitle").textContent="無法連線 Worker";$("lampSub").textContent=String(e)}})();
+document.addEventListener("change",function(e){if(e.target.matches("input,select")&&!e.target.dataset.p&&e.target.id!=="impFile")readUI()});
+(async function(){
+  try{
+    Q.sig=await j("/signal");Q.fx=sanad((await j("/fx")).last[1]);
+    if(INST.some(function(i){return (S.units[i.id]||0)>0}))await runCheck();
+    else render(false);
+  }catch(e){$("lampTitle").textContent="無法連線 Worker";$("lampSub").textContent=String(e)}
+})();
 </script></body></html>

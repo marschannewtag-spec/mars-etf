@@ -214,7 +214,7 @@ function render(mutate){
     const tg=(1-tc)*i.tgt/0.8;
     const drift=(w!=null)&&Math.abs(w-tg)>P.DRIFT*tg;
     const prem=S.prem[i.id];
-    rows+="<tr><td>"+i.id+"<span class='pill'>"+(i.src==="us"?"複委託":"台股")+"</span></td><td>"+fmt(S.units[i.id]||0)+"</td><td>"+(fin(p)?fmt(p,2):"—")+"</td><td>"+(v==null?"—":fmt(v))+"</td><td class='"+(drift?"wn":"")+"'>"+(w==null?"—":(w*100).toFixed(1))+"/"+(tg*100).toFixed(1)+"</td><td>"+(i.src==="tw"?"<input style='width:58px;padding:3px' data-p='"+i.id+"' value='"+(prem==null?"":prem)+"' placeholder='%'>":"—")+"</td></tr>";
+    rows+="<tr><td>"+i.id+" <span style='color:var(--mut);font-size:12px'>"+i.name+"</span><span class='pill'>"+(i.src==="us"?"複委託":"台股")+"</span></td><td>"+fmt(S.units[i.id]||0)+"</td><td>"+(fin(p)?fmt(p,2):"—")+"</td><td>"+(v==null?"—":fmt(v))+"</td><td class='"+(drift?"wn":"")+"'>"+(w==null?"—":(w*100).toFixed(1))+"/"+(tg*100).toFixed(1)+"</td><td>"+(i.src==="tw"?"<input style='width:58px;padding:3px' data-p='"+i.id+"' value='"+(prem==null?"":prem)+"' placeholder='%'>":"—")+"</td></tr>";
   }
   rows+="<tr><td>現金</td><td></td><td></td><td>"+fmt(cash)+"</td><td>"+(cf*100).toFixed(1)+"/"+(tc*100)+"</td><td>—</td></tr>";
   tb.innerHTML=rows;

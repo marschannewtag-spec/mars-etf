@@ -250,7 +250,7 @@ function readUI(){
   S.cashTWD=(+$("cashTWD").value||0)*10000;S.cashUSD=+$("cashUSD").value||0;
   document.querySelectorAll("[data-u]").forEach(function(e){S.units[e.dataset.u]=Math.max(0,Math.floor(+e.value||0))});save();
 }
-async function j(p){const r=await fetch(S.worker+p,{signal:AbortSignal.timeout(15000)});if(!r.ok)throw p+" "+r.status;return r.json()}
+async function j(p){const r=await fetch(S.worker+p,{signal:AbortSignal.timeout(15000),cache:"no-store"});if(!r.ok)throw p+" "+r.status;return r.json()}
 function sanad(x){return fin(x)?x:null}
 async function fetchAll(){
   Q.sig=await j("/signal");

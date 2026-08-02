@@ -103,6 +103,7 @@ label{font-size:12px;color:var(--mut);display:block;margin:10px 0 4px}
     <div class="stat"><label>分層狀態</label><b id="vTier" style="font-size:14px">—</b><small>-30 / -40 / -50</small></div>
     <div class="stat"><label>組合距峰值</label><b id="vDD">—</b><small>名目高水位</small></div>
     <div class="stat"><label>市場資料日期</label><b id="vAsof" style="font-size:14px">—</b><small>過期 &gt;4 天自動中止</small></div>
+    <div class="stat"><label>00653L 扳機 · Brent&gt;90 且 INR&gt;96</label><b id="vTrip" style="font-size:15px">—</b><small id="vTripSub">數值自動監測,出場由月檢裁決</small></div>
   </div>
 </div>
 
@@ -240,6 +241,12 @@ function render(mutate){
   $("vVIXsub").textContent=s.vix.above?"超過門檻":"低於門檻";
   $("vFX").textContent=fin(Q.fx)?Q.fx.toFixed(3):"—";
   $("vAsof").textContent=(s.asof&&s.asof.spx)||"—";
+  if(s.tripwire&&s.tripwire.brent!=null){
+    const tp=s.tripwire;
+    $("vTrip").innerHTML="Brent "+tp.brent+" · INR "+tp.usdinr;
+    if(tp.armed){$("vTrip").innerHTML+=' <span class="neg">● 觸發</span>';$("vTripSub").textContent="扳機觸發!下次月檢裁決 00653L 出場";}
+    else{$("vTrip").innerHTML+=' <span class="pos">○ 未觸發</span>';}
+  }else{$("vTrip").textContent="資料暫缺";}
   const tb=$("holdT").querySelector("tbody");
   let rows="";
   for(const i of INST){

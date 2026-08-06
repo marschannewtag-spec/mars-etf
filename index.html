@@ -294,20 +294,33 @@ function readUI(){
 }
 async function j(p){const r=await fetch(S.worker+p,{signal:AbortSignal.timeout(15000),cache:"no-store"});if(!r.ok)throw p+" "+r.status;return r.json()}
 function sanad(x){return fin(x)?x:null}
-async function fetchAll(){
-  Q.sig=await j("/signal");
-  Q.fx=sanad((await j("/fx")).last[1]);
-  for(const i of LIVE()){
-    Q.px[i.id]=null;
-    try{
-      if(i.src==="tw"){const d=await j("/tw?no="+i.id);
-        let p=(d.realtime&&d.realtime.price!=null)?+d.realtime.price:NaN;
-        if(!fin(p)&&d.month_daily&&d.month_daily.length)p=+d.month_daily[d.month_daily.length-1][1];
-        if(!fin(p)){const y=await j("/quotes?symbols="+i.id+".TW");p=+y[i.id+".TW"].last[1];}
-        Q.px[i.id]=sanad(p);
-      }else{const y=await j("/quotes?symbols="+i.id);Q.px[i.id]=sanad(+y[i.id].last[1]);}
-    }catch(e){Q.px[i.id]=null}
+/* 單一標的取價:realtime → month_daily 末筆 → /quotes 三段 fallback */
+async function fetchPx(i){
+  const id=encodeURIComponent(i.id);
+  if(i.src==="tw"){
+    const d=await j("/tw?no="+id);
+    let p=(d&&d.realtime&&d.realtime.price!=null)?+d.realtime.price:NaN;
+    if(!fin(p)&&d&&d.month_daily&&d.month_daily.length)p=+d.month_daily[d.month_daily.length-1][1];
+    if(!fin(p)){const y=await j("/quotes?symbols="+id+".TW");p=+y[i.id+".TW"].last[1]}
+    return sanad(p);
   }
+  const y=await j("/quotes?symbols="+id);
+  return sanad(+y[i.id].last[1]);
+}
+async function fetchAll(){
+  /* 全部並行:序列版 8 個請求約 825ms,並行約 110ms(實測 Worker 無限流)。
+     只有 /signal 保留 reject 讓上層顯示原始 HTTP 錯誤;
+     匯率與個股失敗一律降為 null,交給 runCheck 的 blockers 統一處理。 */
+  const list=LIVE();
+  const res=await Promise.all([
+    j("/signal"),
+    j("/fx").then(function(d){return sanad(d&&d.last&&d.last[1])},function(){return null}),
+  ].concat(list.map(function(i){return fetchPx(i).then(null,function(){return null})})));
+  Q.sig=res[0];
+  Q.fx=res[1];
+  /* 重建整份報價表,避免已刪除標的的舊價殘留 */
+  const px={};list.forEach(function(i,ix){px[i.id]=res[ix+2]});
+  Q.px=px;
 }
 function pxTWD(i){const p=Q.px[i.id];if(!fin(p))return null;return i.src==="us"?(fin(Q.fx)?p*Q.fx:null):p}
 function valTWD(i){const pt=pxTWD(i);if(pt==null)return null;const r=(S.units[i.id]||0)*pt;return Number.isFinite(r)?r:null}

@@ -18,6 +18,7 @@ require("./golden.test.js");
 require("./invariant.test.js");
 require("./parity.test.js");
 require("./monitor.test.js");
+require("./dataset.test.js");
 if (withContract) require("./contract.test.js");
 
 console.log("\x1b[1m三層攻守引擎 · 測試套件\x1b[0m");

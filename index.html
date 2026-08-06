@@ -158,10 +158,17 @@ nav a.on{color:var(--ok)}
 <div class="view" id="view-stress">
   <div class="card"><h2>歷史壓力測試(定案 D 引擎)</h2>
   <table><tbody>
-  <tr><td>1990–2026 全期</td><td>CAGR 15.2% · MaxDD -62.6%</td></tr>
-  <tr><td>2000-03 最壞起點</td><td>最深 -80% · 13.8年 1.09x</td></tr>
-  <tr><td>2015–2026</td><td>CAGR ~20% · MaxDD -36%</td></tr>
-  <tr><td>4年虧損機率</td><td>~13%(MC 5000 路徑)</td></tr></tbody></table></div>
+  <tr><td>1990–2026 全期 <span class="pos">✓</span></td><td>CAGR 15.2% · MaxDD -62.6%</td></tr>
+  <tr><td>2000-03 最壞起點 <span class="wn">†</span></td><td>最深 -80% · 13.8年 1.09x</td></tr>
+  <tr><td>2015–2026 <span class="pos">✓</span></td><td>CAGR ~20% · MaxDD -36%</td></tr>
+  <tr><td>4年虧損機率 <span class="wn">†</span></td><td>~13%(MC 5000 路徑)</td></tr></tbody></table>
+  <div class="note"><span class="pos">✓</span> 可由本機 D_RETS 重現(全期 CAGR 15.2% / MaxDD -62.6% 精準吻合;
+  2015 起 CAGR 18.3% / MaxDD -34.5%)。<br>
+  <span class="wn">†</span> <b>無法由 D_RETS 重現</b>,數字沿用已佚失的原始回測。
+  D_RETS 為月頻,月底取樣會低估回撤——任何起點的區間回撤在數學上都不可能超過全期的 -62.6%,
+  故 -80% 應為日頻量測結果,兩者可同時成立但不可混用。
+  虧損機率本機實測 11.3–11.6%(10 萬條路徑),差異來自區塊拔靴法的參數選擇。<br>
+  重跑驗證:<code>node test/tools/verify-dataset.js</code></div></div>
   <div class="card"><h2>Monte Carlo</h2>
   <button class="sec" id="btnMC">用目前投入額跑 4 年 Monte Carlo</button>
   <div id="mcOut" class="mono" style="margin-top:10px;font-size:13px"></div>

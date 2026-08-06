@@ -489,16 +489,19 @@ $("btnAuto").onclick=async function(){
   $("btnAuto").disabled=false;
 };
 $("btnMC").onclick=function(){
-  const capTWD=S.ccy==="USD"?(fin(Q.fx)?S.cap*Q.fx:null):S.cap;
-  if(!capTWD){toast("USD 投入需先取得匯率(執行一次月檢)");return}
-  const paths=3000,H=48,B=12,res=[];
+  /* 兩種前置條件分開判斷:沒填投入金額不該回報成匯率問題 */
+  if(!fin(S.cap)){toast("請先至設定頁填入投入金額");return}
+  if(S.ccy==="USD"&&!fin(Q.fx)){toast("USD 投入需先取得匯率(執行一次月檢)");return}
+  const capTWD=S.ccy==="USD"?S.cap*Q.fx:S.cap;
+  const paths=5000,H=48,B=12,res=[];
   for(let p=0;p<paths;p++){let v=1,n=0;
-    while(n<H){const st=Math.floor(Math.random()*(D_RETS.length-B));
+    /* 起點上限須為 length-B(含),否則最後 B-1 筆永遠取樣不到 */
+    while(n<H){const st=Math.floor(Math.random()*(D_RETS.length-B+1));
       for(let k=0;k<B&&n<H;k++,n++)v*=1+D_RETS[st+k];}
     res.push(v);}
   res.sort(function(a,b){return a-b});
-  const q=function(x){return res[Math.floor(paths*x)]};
-  $("mcOut").innerHTML="4 年後(3000 路徑,取樣 1990–2026 定案引擎):<br>P5 "+fmt(capTWD*q(.05))+" · 中位 "+fmt(capTWD*q(.5))+" · P95 "+fmt(capTWD*q(.95))+" TWD<br>虧損機率 "+(res.filter(function(x){return x<1}).length/paths*100).toFixed(1)+"%";
+  const q=function(x){return res[Math.min(Math.floor(paths*x),paths-1)]};
+  $("mcOut").innerHTML="4 年後("+fmt(paths)+" 路徑,取樣 1990–2026 定案引擎):<br>P5 "+fmt(capTWD*q(.05))+" · 中位 "+fmt(capTWD*q(.5))+" · P95 "+fmt(capTWD*q(.95))+" TWD<br>虧損機率 "+(res.filter(function(x){return x<1}).length/paths*100).toFixed(1)+"%";
   log("MC:capTWD="+fmt(capTWD));
 };
 $("btnExport").onclick=function(){

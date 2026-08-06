@@ -17,6 +17,7 @@ const filter = onlyIx >= 0 ? argv[onlyIx + 1] : null;
 require("./golden.test.js");
 require("./invariant.test.js");
 require("./parity.test.js");
+require("./monitor.test.js");
 if (withContract) require("./contract.test.js");
 
 console.log("\x1b[1m三層攻守引擎 · 測試套件\x1b[0m");

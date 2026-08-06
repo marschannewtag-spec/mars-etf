@@ -10,6 +10,11 @@ engine/
   engine.js         決策核心「單一真相」。純函式,無 DOM / 無網路 / 無 localStorage。
   engine.json       由 dump-params.js 產生,給非 JS 消費端讀。勿手動編輯。
   dump-params.js    產生 engine.json
+monitor/
+  check.js          每日監控:抓市場資料 → 用共用引擎判斷 → 例外才發 Issue
+  heartbeat.json    上次觀測到的市場狀態(只有市場資料,絕不含持倉)
+.github/workflows/
+  daily-monitor.yml 台北時間週一至五 16:00 執行
 test/
   run.js            測試入口
   golden.test.js    黃金案例:策略規格的可執行版本
@@ -33,8 +38,39 @@ node engine/dump-params.js    # 參數改動後重新產生 engine.json
 
 ## 部署
 
+線上版:https://marschannewtag-spec.github.io/mars-etf/(GitHub Pages,main 分支根目錄)
+
 **index.html 不再是單一檔案**,必須與 `engine/` 目錄一起部署。
 引擎載入失敗時 PWA 會整頁顯示錯誤並拒絕顯示任何配置建議(刻意的大聲失敗)。
+`.nojekyll` 用來關閉 Pages 的 Jekyll 處理,確保 `engine/` 原樣發布——刪掉它線上版會停機。
+
+## 每日監控
+
+平常完全靜默,只在需要動手時開 GitHub Issue(手機收得到)。
+
+**會通知**(市場驅動,時效性強):
+風險旗標翻轉 · Worker 斷線 · 資料過期 > 4 天 · 上游格式破損 ·
+00653L 扳機翻轉 · Worker 的 risk_flag 與 engine.js 獨立重算不一致
+
+**不通知**(需要持倉,留在 PWA 本機算):權重漂移超帶 · 分層觸發
+
+### 為什麼監控不碰持倉
+
+這個 repo 是公開的,**GitHub Issue 也是全世界可讀**。
+就算把持倉藏進 Actions secret,通知內容一旦帶金額仍等於公開。
+
+`monitor/check.js` 的 `evaluate()` 由設計上就拿不到持倉——參數只有
+前次心跳與市場觀測,不是靠事後過濾。test/monitor.test.js 有測試釘住這件事。
+
+若日後想要含持倉的監控,乾淨做法是另開一個私有 repo,不要把這個改成私有
+(Pages 在私有 repo 需要付費方案,改了線上版會停機)。
+
+### 手動觸發
+
+Actions 頁面 → 每日監控 → Run workflow。首次執行只建立心跳基準,不發翻轉通知。
+
+workflow 會先跑 `node test/run.js`,引擎測試不過就中止——
+引擎壞了就不該相信它的判斷。
 
 ## 引擎規格
 

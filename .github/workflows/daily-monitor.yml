@@ -1,0 +1,102 @@
+name: 每日監控
+
+# 平常完全靜默,只在需要你動手時開 Issue(手機會收到通知)。
+#
+# 涵蓋:風險旗標翻轉、Worker 斷線、資料過期、上游格式破損、
+#       00653L 扳機翻轉、Worker 判斷與本地重算不一致。
+#
+# 不涵蓋(需要持倉,留在 PWA 本機算):權重漂移超帶、分層觸發。
+# 這個 repo 是公開的,Issue 也是公開的,持倉金額絕不放進來。
+
+on:
+  schedule:
+    # 08:00 UTC = 台北 16:00,台股收盤後。台灣無日光節約時間。
+    - cron: "0 8 * * 1-5"
+  workflow_dispatch:        # 可手動觸發,用於首次驗證
+
+# 併發保護:排程與手動同時觸發時,不要兩份一起改 heartbeat
+concurrency:
+  group: daily-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write           # 提交 heartbeat
+  issues: write             # 開通知 Issue
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 引擎自我驗證
+        # 監控用的是同一套引擎。引擎壞了就不該相信它的判斷,
+        # 先跑離線測試(黃金案例/不變量/平價),不過就中止。
+        run: node test/run.js
+
+      - name: 執行監控
+        id: monitor
+        run: node monitor/check.js
+
+      - name: 讀取結果
+        id: result
+        run: |
+          echo "alerts=$(jq '.alerts | length' monitor/result.json)" >> "$GITHUB_OUTPUT"
+          echo "first=$(jq -r '.firstRun' monitor/result.json)" >> "$GITHUB_OUTPUT"
+
+      - name: 發出通知
+        if: steps.result.outputs.alerts != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          COUNT=$(jq '.alerts | length' monitor/result.json)
+          # 以最高優先的那則作為標題
+          TITLE=$(jq -r '.alerts[0].title' monitor/result.json)
+          DATE=$(jq -r '.at' monitor/result.json)
+
+          {
+            jq -r '.alerts[] | "## " + .title + "\n\n" + .detail + "\n"' monitor/result.json
+            echo "---"
+            echo ""
+            echo "### 目前市場狀態"
+            echo ""
+            jq -r '.state | to_entries[] | "- **" + .key + "**: " + (.value|tostring)' monitor/result.json
+            echo ""
+            echo "---"
+            echo ""
+            echo "配置台:https://marschannewtag-spec.github.io/mars-etf/"
+            echo ""
+            echo "> 本通知不含持倉資料。實際下單清單請開配置台執行月度檢查。"
+            echo "> 自動化永不下單。"
+          } > /tmp/body.md
+
+          # 同標題的未關閉 Issue 已存在就補一則留言,不重複開
+          EXISTING=$(gh issue list --label 監控 --state open \
+                       --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file /tmp/body.md
+            echo "已於 Issue #$EXISTING 補充留言"
+          else
+            gh issue create --title "[$DATE] $TITLE" \
+              --body-file /tmp/body.md --label 監控 || \
+            gh issue create --title "[$DATE] $TITLE" --body-file /tmp/body.md
+            echo "已開立新 Issue($COUNT 則警報)"
+          fi
+
+      - name: 更新心跳
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- monitor/heartbeat.json; then
+            echo "狀態未變,無需提交"
+            exit 0
+          fi
+          git config user.name  "etf-monitor[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add monitor/heartbeat.json
+          git commit -m "chore(monitor): 更新心跳 $(jq -r '.checkedAt' monitor/heartbeat.json)"
+          git push

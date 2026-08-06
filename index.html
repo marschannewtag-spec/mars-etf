@@ -235,6 +235,10 @@ const INV=function(){var t=0;LIVE().forEach(function(i){t+=(+i.tgt||0)});return 
 const $=function(id){return document.getElementById(id)};
 const fin=function(x){return Number.isFinite(x)&&x>0};
 const fmt=function(n,d){d=d||0;return Number.isFinite(n)?n.toLocaleString("zh-TW",{maximumFractionDigits:d,minimumFractionDigits:d}):"—"};
+/* 凡是標的名稱/代碼、changelog、Worker 回傳值進 innerHTML 都要過這一關:
+   未跳脫時名稱含 " 會截斷輸入框並在下次存檔寫回損毀值,匯入他人 JSON 更等於執行任意 HTML */
+const ESC_MAP={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
+const esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return ESC_MAP[c]})};
 function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(function(){t.style.display="none"},2800)}
 const save=function(){localStorage.setItem("etf2x",JSON.stringify(S))};
 const log=function(m){S.log.unshift(new Date().toISOString().slice(0,16).replace("T"," ")+" · "+m);S.log=S.log.slice(0,500);save();renderLog()};
@@ -252,12 +256,12 @@ document.querySelectorAll("nav a").forEach(function(a){
 function initUI(){
   $("cfgW").value=S.worker; $("cfgCap").value=S.cap?S.cap/10000:""; $("cfgCcy").value=S.ccy||"TWD";
   $("cashTWD").value=((S.cashTWD||0)/10000).toFixed(1); $("cashUSD").value=S.cashUSD||0;
-  $("unitBox").innerHTML=LIVE().map(function(i){return '<div><label>'+i.id+'</label><input data-u="'+i.id+'" type="number" value="'+(S.units[i.id]||0)+'"></div>'}).join("");
+  $("unitBox").innerHTML=LIVE().map(function(i){return '<div><label>'+esc(i.id)+'</label><input data-u="'+esc(i.id)+'" type="number" value="'+(S.units[i.id]||0)+'"></div>'}).join("");
   var ib="";
   INST.forEach(function(i,ix){
     ib+='<div style="display:grid;grid-template-columns:92px 1fr 62px 76px 36px;gap:6px;margin-bottom:6px">'
-      +'<input data-if="id" data-ix="'+ix+'" value="'+(i.id||"")+'" placeholder="代碼">'
-      +'<input data-if="name" data-ix="'+ix+'" value="'+(i.name||"")+'" placeholder="名稱">'
+      +'<input data-if="id" data-ix="'+ix+'" value="'+esc(i.id)+'" placeholder="代碼">'
+      +'<input data-if="name" data-ix="'+ix+'" value="'+esc(i.name)+'" placeholder="名稱">'
       +'<input data-if="tgt" data-ix="'+ix+'" type="number" value="'+Math.round((i.tgt||0)*100)+'" placeholder="%">'
       +'<select data-if="pocket" data-ix="'+ix+'"><option value="core"'+(i.pocket==="core"?" selected":"")+'>核心</option><option value="sat"'+(i.pocket!=="core"?" selected":"")+'>衛星</option></select>'
       +'<button class="sec" data-del="'+ix+'" style="padding:6px 4px">✕</button></div>';
@@ -342,7 +346,7 @@ function render(mutate){
   $("vFX").textContent=fin(Q.fx)?Q.fx.toFixed(3):"—";
   if(s.tripwire&&s.tripwire.brent!=null){
     const tp=s.tripwire;
-    $("vTrip").innerHTML="B "+tp.brent+" · INR "+tp.usdinr+(tp.armed?' <span class="neg">●</span>':' <span class="pos">○</span>');
+    $("vTrip").innerHTML="B "+esc(tp.brent)+" · INR "+esc(tp.usdinr)+(tp.armed?' <span class="neg">●</span>':' <span class="pos">○</span>');
     $("vTripSub").textContent=tp.armed?"觸發!下次月檢裁決出場":"Brent>90 且 INR>96";
   }else{$("vTrip").textContent="資料暫缺";}
   /* 持倉頁 */
@@ -355,10 +359,10 @@ function render(mutate){
     const off=(w!=null)&&Math.abs(w-tg)>P.DRIFT*tg;
     const prem=S.prem[i.id];
     const scale=0.40;
-    cards+='<div class="hcard"><div class="hrow"><div class="hname">'+i.id+'<span class="nm">'+i.name+'</span><span class="chip'+(i.pocket==="sat"?" sat":"")+'">'+(i.pocket==="sat"?"衛星":"核心")+'</span></div><div class="hval">'+(v==null?"—":fmt(v))+'</div></div>'
+    cards+='<div class="hcard"><div class="hrow"><div class="hname">'+esc(i.id)+'<span class="nm">'+esc(i.name)+'</span><span class="chip'+(i.pocket==="sat"?" sat":"")+'">'+(i.pocket==="sat"?"衛星":"核心")+'</span></div><div class="hval">'+(v==null?"—":fmt(v))+'</div></div>'
       +'<div class="hsub"><span>'+fmt(S.units[i.id]||0)+' 股 @ '+(fin(p)?fmt(p,2):"—")+'</span><span class="'+(off?"wn":"")+'">'+(w==null?"—":(w*100).toFixed(1))+'% / '+(tg*100).toFixed(1)+'%</span></div>'
       +'<div class="wtrack"><div class="wfill'+(off?" off":"")+'" style="width:'+(w==null?0:Math.min(w/scale*100,100))+'%"></div><div class="wtick" style="left:'+Math.min(tg/scale*100,100)+'%"></div></div>'
-      +'<div class="hfoot"><span>溢價% <input data-p="'+i.id+'" value="'+(prem==null?"":prem)+'" placeholder="—"></span><span>'+(off?"⚠ 超出容忍帶":"容忍帶內")+'</span></div></div>';
+      +'<div class="hfoot"><span>溢價% <input data-p="'+esc(i.id)+'" value="'+esc(prem==null?"":prem)+'" placeholder="—"></span><span>'+(off?"⚠ 超出容忍帶":"容忍帶內")+'</span></div></div>';
   }
   $("holdCards").innerHTML=cards;
   document.querySelectorAll("[data-p]").forEach(function(e){e.onchange=function(){S.prem[e.dataset.p]=+e.value;save()}});
@@ -382,7 +386,7 @@ function makePlan(st){
         if(pt==null){units[i.id]=cur;continue}
         const nu=Math.floor(cur*pt*(1-sell/hold)/pt);
         units[i.id]=nu;after+=nu*pt;
-        if(cur-nu>0)orders.push({m:i.id+" 賣出 "+fmt(cur-nu)+" 股(約 "+fmt((cur-nu)*pt)+" TWD)",side:"sell"});
+        if(cur-nu>0)orders.push({m:esc(i.id)+" 賣出 "+fmt(cur-nu)+" 股(約 "+fmt((cur-nu)*pt)+" TWD)",side:"sell"});
       }
       return{orders:orders,units:units,cash:V-after,head:"第三層減碼:拉現金向 50%(單次上限=持股 50%)",headSide:"sell"};
     }
@@ -401,7 +405,7 @@ function makePlan(st){
     if(nu!==cur){
       const du=nu-cur;
       const warn=((S.prem[i.id]||0)>P.PREM&&du>0)?" ⚠溢價超標,考慮緩買":"";
-      orders.push({m:i.id+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))+" 股(約 "+fmt(Math.abs(du)*pt)+" TWD)"+warn,side:du>0?"buy":"sell"});
+      orders.push({m:esc(i.id)+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))+" 股(約 "+fmt(Math.abs(du)*pt)+" TWD)"+warn,side:du>0?"buy":"sell"});
     }
   }
   if(!orders.length)return{hold:"整數化後無需交易——本月無動作"};
@@ -425,8 +429,8 @@ async function runCheck(){
     const stale=(Q.sig.asof&&Q.sig.asof.spx)?Math.floor((Date.parse(today)-Date.parse(Q.sig.asof.spx))/864e5):99;
     const blockers=[];
     if(!LIVE().length)blockers.push("尚未設定任何標的(請至設定頁填入代碼)");
-    if(bad.length)blockers.push("報價缺失:"+bad.map(function(i){return i.id}).join("、"));
-    if(stale>P.STALE)blockers.push("市場資料過期 "+stale+" 天(asof "+(Q.sig.asof?Q.sig.asof.spx:"?")+")");
+    if(bad.length)blockers.push("報價缺失:"+bad.map(function(i){return esc(i.id)}).join("、"));
+    if(stale>P.STALE)blockers.push("市場資料過期 "+stale+" 天(asof "+esc(Q.sig.asof?Q.sig.asof.spx:"?")+")");
     if(!fin(Q.fx))blockers.push("匯率無效");
     if(blockers.length){
       render(false);
@@ -472,7 +476,7 @@ $("btnAuto").onclick=async function(){
       const cur=S.units[i.id]||0, du=sh-cur;
       plan0.units[i.id]=sh;spend+=sh*pt;
       if(Math.abs(du)*pt>=capTWD*0.002){same=false;
-        orders+="<div class='sug"+(du<0?" sell":"")+"'>"+i.id+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))
+        orders+="<div class='sug"+(du<0?" sell":"")+"'>"+esc(i.id)+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))
           +" 股(約 "+fmt(Math.abs(du)*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")<br><span style='color:var(--mut);font-size:12px'>目前 "+fmt(cur)+" → 目標 "+fmt(sh)+" 股</span></div>";}
     }
     let html="<div class='sug hold'>✔ 目標配置已套用(總資產 "+fmt(capTWD)+" TWD)。以下是<b>與目前持倉的差額</b>,請至券商執行;實際成交不同時至設定頁校正:</div>"
@@ -517,7 +521,7 @@ $("btnResetPeak").onclick=function(){
   if(!confirm("重設組合峰值與分層狀態?(大額入金、ETF 分割/反分割後使用)"))return;
   S.peak=0;S.tierTc=P.BASE;save();toast("已重設,下次月檢重建峰值");log("維護:重設峰值與分層");
 };
-function renderLog(){$("logBox").innerHTML=S.log.slice(0,40).map(function(l){return "<div class='log'>"+l+"</div>"}).join("")||"<div class='log'>尚無紀錄</div>"}
+function renderLog(){$("logBox").innerHTML=S.log.slice(0,40).map(function(l){return "<div class='log'>"+esc(l)+"</div>"}).join("")||"<div class='log'>尚無紀錄</div>"}
 initUI();
 document.addEventListener("change",function(e){if(e.target.matches("input,select")&&!e.target.dataset.p&&e.target.id!=="impFile")readUI()});
 (async function(){

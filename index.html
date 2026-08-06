@@ -326,13 +326,30 @@ function tierTarget(dd,prev){
   }
   return want;
 }
+/* Worker 回應驗證。整套策略的安全性都掛在 risk_flag 上,欄位缺漏時
+   絕不可讓畫面靜默顯示「正常期」——實測 risk_flag 缺失的畸形回應
+   會讓 SPX 破線 + VIX 45 的盤面顯示成正常期並建議加碼。一律 fail closed。*/
+/* null 與 "" 用 + 轉型都會變成 0 並通過 Number.isFinite,必須先擋掉 */
+const numOk=function(x){return x!=null&&x!==""&&Number.isFinite(+x)};
+function sigBad(s){
+  if(!s||typeof s!=="object"||Array.isArray(s))return "Worker /signal 回應格式錯誤";
+  if(s.risk_flag==null)return "回應缺少風險旗標 risk_flag";
+  if(!s.spx||!numOk(s.spx.last)||!numOk(s.spx.sma12m)||+s.spx.sma12m<=0)return "SPX 資料缺漏或無效";
+  if(!s.vix||!numOk(s.vix.last))return "VIX 資料缺漏或無效";
+  if(!s.asof||!s.asof.spx)return "回應缺少資料日期 asof.spx";
+  return null;
+}
 function render(mutate){
-  const s=Q.sig,t=totals(),V=t.V,cash=t.cash;
-  const risk=s.risk_flag;
+  const s=Q.sig||{},t=totals(),V=t.V,cash=t.cash;
+  const spx=s.spx||{},vix=s.vix||{};
+  const spxL=+spx.last,spxM=+spx.sma12m,vixL=+vix.last;
+  /* 燈號一律 fail closed:訊號有任何問題都不可顯示成正常期 */
+  const risk=s.risk_flag,sigErr=sigBad(s);
   const pill=$("lampPill");
-  pill.className="pill "+(risk?"risk":"ok");
-  pill.textContent=risk?"⛔ 風險期 · 凍結投入,僅允許減碼":"✓ 正常期 · 依三層引擎執行";
-  $("lampSub").textContent="SPX "+fmt(s.spx.last)+(s.spx.below?" 破":" > ")+"SMA "+fmt(s.spx.sma12m)+" · VIX "+s.vix.last.toFixed(1)+(s.vix.above?" >32":" <32");
+  pill.className="pill "+((risk||sigErr)?"risk":"ok");
+  pill.textContent=sigErr?"⛔ 市場訊號無效 · 不可依此操作"
+    :(risk?"⛔ 風險期 · 凍結投入,僅允許減碼":"✓ 正常期 · 依三層引擎執行");
+  $("lampSub").textContent="SPX "+fmt(spxL)+(spx.below?" 破":" > ")+"SMA "+fmt(spxM)+" · VIX "+(Number.isFinite(vixL)?vixL.toFixed(1):"—")+(vix.above?" >32":" <32");
   $("heroAsof").textContent="資料日期 "+((s.asof&&s.asof.spx)||"—")+"(過期>4天中止)";
   if(mutate&&!t.miss&&fin(V)&&fin(Q.fx)){
     if(V>=S.peak){S.peak=V;S.tierTc=P.BASE}
@@ -346,10 +363,11 @@ function render(mutate){
   $("heroTc").textContent=(tc*100);
   $("heroV").textContent="組合總值 "+fmt(V)+" TWD · 距峰值 "+(dd*100).toFixed(1)+"%"+(t.miss?" ⚠報價缺":"");
   $("tmark").style.left=Math.min(Math.abs(Math.min(dd,0))/0.60*100,100)+"%";
-  $("vSMA").textContent=fmt(s.spx.last)+" / "+fmt(s.spx.sma12m);
-  $("vSMAsub").textContent=s.spx.below?"跌破均線":"站上均線 +"+((s.spx.last/s.spx.sma12m-1)*100).toFixed(1)+"%";
-  $("vVIX").textContent=s.vix.last.toFixed(2);
-  $("vVIXsub").textContent=s.vix.above?"超過門檻":"低於門檻";
+  $("vSMA").textContent=fmt(spxL)+" / "+fmt(spxM);
+  $("vSMAsub").textContent=spx.below?"跌破均線"
+    :((Number.isFinite(spxL)&&fin(spxM))?"站上均線 +"+((spxL/spxM-1)*100).toFixed(1)+"%":"—");
+  $("vVIX").textContent=Number.isFinite(vixL)?vixL.toFixed(2):"—";
+  $("vVIXsub").textContent=vix.above?"超過門檻":"低於門檻";
   $("vFX").textContent=fin(Q.fx)?Q.fx.toFixed(3):"—";
   if(s.tripwire&&s.tripwire.brent!=null){
     const tp=s.tripwire;
@@ -433,11 +451,14 @@ async function runCheck(){
     await fetchAll();
     const bad=LIVE().filter(function(i){return !fin(Q.px[i.id])});
     const today=new Date(Date.now()+8*3600e3).toISOString().slice(0,10);
-    const stale=(Q.sig.asof&&Q.sig.asof.spx)?Math.floor((Date.parse(today)-Date.parse(Q.sig.asof.spx))/864e5):99;
+    const sig=Q.sig||{};
+    const stale=(sig.asof&&sig.asof.spx)?Math.floor((Date.parse(today)-Date.parse(sig.asof.spx))/864e5):99;
     const blockers=[];
+    const sigErr=sigBad(Q.sig);
+    if(sigErr)blockers.push("市場訊號無效:"+esc(sigErr));
     if(!LIVE().length)blockers.push("尚未設定任何標的(請至設定頁填入代碼)");
     if(bad.length)blockers.push("報價缺失:"+bad.map(function(i){return esc(i.id)}).join("、"));
-    if(stale>P.STALE)blockers.push("市場資料過期 "+stale+" 天(asof "+esc(Q.sig.asof?Q.sig.asof.spx:"?")+")");
+    if(stale>P.STALE)blockers.push("市場資料過期 "+stale+" 天(asof "+esc(sig.asof?sig.asof.spx:"?")+")");
     if(!fin(Q.fx))blockers.push("匯率無效");
     if(blockers.length){
       render(false);
@@ -468,10 +489,15 @@ $("btnAuto").onclick=async function(){
   $("btnAuto").disabled=true;
   try{
     await fetchAll();
-    if(Q.sig.risk_flag){
-      $("sugBox").innerHTML="<div class='sug block'>⛔ 風險旗標亮著。規格:風險期凍結投入——自動分配暫停,等旗標熄滅再來。</div>";
+    /* 訊號無效時不可當成「沒有風險」放行——那會在崩盤裡一次投入 80% */
+    const sigErr=sigBad(Q.sig);
+    if(sigErr||Q.sig.risk_flag){
+      $("sugBox").innerHTML="<div class='sug block'>⛔ "+(sigErr
+        ?"市場訊號無效:"+esc(sigErr)+"——無法確認風險狀態,自動分配中止。"
+        :"風險旗標亮著。規格:風險期凍結投入——自動分配暫停,等旗標熄滅再來。")+"</div>";
       document.querySelector('[data-v="today"]').click();
-      log("自動分配被風險閘門擋下");$("btnAuto").disabled=false;return;
+      log(sigErr?("自動分配中止:"+sigErr):"自動分配被風險閘門擋下");
+      $("btnAuto").disabled=false;return;
     }
     const bad=LIVE().filter(function(i){return !fin(Q.px[i.id])});
     if(bad.length||!fin(Q.fx)){toast("報價不完整("+bad.map(function(i){return i.id}).join(",")+"),中止");$("btnAuto").disabled=false;return}
@@ -537,7 +563,10 @@ document.addEventListener("change",function(e){if(e.target.matches("input,select
 (async function(){
   try{
     Q.sig=await j("/signal");Q.fx=sanad((await j("/fx")).last[1]);
-    if(INST.some(function(i){return (S.units[i.id]||0)>0}))await runCheck();
+    const sigErr=sigBad(Q.sig);
+    /* 燈號由 render 依 sigBad 自行 fail closed,這裡只補上具體原因 */
+    if(sigErr){render(false);$("lampSub").textContent=sigErr;return}
+    if(LIVE().some(function(i){return (S.units[i.id]||0)>0}))await runCheck();
     else render(false);
   }catch(e){const p=$("lampPill");p.className="pill risk";p.textContent="⛔ 無法連線 Worker";$("lampSub").textContent=String(e)}
 })();

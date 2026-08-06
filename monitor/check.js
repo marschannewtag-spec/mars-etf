@@ -16,6 +16,7 @@
  * 用法:
  *   node monitor/check.js                 讀 heartbeat、檢查、寫回、輸出結果
  *   node monitor/check.js --dry-run       不寫入 heartbeat
+ *   node monitor/check.js --drill         演練:強制發出一則測試通知
  *   ETF_WORKER=https://...                覆寫 Worker 位址
  *
  * 結果會寫入 monitor/result.json 供 workflow 讀取,並印出人類可讀摘要。
@@ -30,6 +31,7 @@ const WORKER = process.env.ETF_WORKER
 const HEARTBEAT = path.join(__dirname, "heartbeat.json");
 const RESULT = path.join(__dirname, "result.json");
 const DRY = process.argv.includes("--dry-run");
+const DRILL = process.argv.includes("--drill");
 const TIMEOUT = 20000;
 
 /** 台北時間(UTC+8)的 YYYY-MM-DD HH:mm */
@@ -190,6 +192,24 @@ async function main() {
   const obs = await observe();
   const { alerts, state } = evaluate(prev, obs, taipeiToday());
 
+  /* 演練:強制發一則通知,確認 Issue 真的開得起來、手機真的收得到。
+     不動心跳,也不假造市場狀態——內容明確標示為演練,不會被誤讀成真警報。 */
+  if (DRILL) {
+    alerts.push({
+      level: "drill",
+      title: "🧪 通知管道演練(非真實警報)",
+      detail: "這是一次人為觸發的演練,用來確認通知管道暢通。**不代表任何市場事件,不需要任何操作。**\n\n"
+        + "看到這則 Issue 代表:\n"
+        + "- Actions 排程能執行\n- Worker 抓得到資料\n- Issue 開得起來\n- 通知送得到你手機\n\n"
+        + "確認後直接關閉此 Issue 即可。真實警報的標題會是「風險期開始」「Worker 無回應」這類。\n\n"
+        + (state
+            ? `演練當下的市場狀態:風險旗標 ${state.riskFlag ? "🔴 亮" : "🟢 熄"}`
+              + ` · SPX ${state.spxLast} / MA12 ${state.spxSma12m} · VIX ${state.vixLast}`
+              + ` · 資料日期 ${state.asof}`
+            : "(演練當下無法取得市場資料——這本身就是個問題,請檢查 Worker)")
+    });
+  }
+
   const result = {
     at: obs.at,
     firstRun: !prev,
@@ -200,7 +220,8 @@ async function main() {
   };
 
   fs.writeFileSync(RESULT, JSON.stringify(result, null, 2) + "\n");
-  if (!DRY && state) fs.writeFileSync(HEARTBEAT, JSON.stringify(state, null, 2) + "\n");
+  /* 演練不可污染心跳:否則演練後的下一次真實檢查會少比對一天 */
+  if (!DRY && !DRILL && state) fs.writeFileSync(HEARTBEAT, JSON.stringify(state, null, 2) + "\n");
 
   /* 人類可讀摘要(Actions log 用) */
   console.log(`[${obs.at}] 監控執行完畢`);

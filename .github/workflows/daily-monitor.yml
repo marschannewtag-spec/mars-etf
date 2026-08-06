@@ -12,7 +12,12 @@ on:
   schedule:
     # 08:00 UTC = 台北 16:00,台股收盤後。台灣無日光節約時間。
     - cron: "0 8 * * 1-5"
-  workflow_dispatch:        # 可手動觸發,用於首次驗證
+  workflow_dispatch:        # 可手動觸發
+    inputs:
+      drill:
+        description: "演練:強制發一則測試通知,確認手機收得到(不影響心跳)"
+        type: boolean
+        default: false
 
 # 併發保護:排程與手動同時觸發時,不要兩份一起改 heartbeat
 concurrency:
@@ -27,11 +32,13 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # v4 的 runtime 是已棄用的 Node 20,GitHub 已強制改跑 Node 24。
+      # 這是要無人值守跑數年的排程,不能留著遲早會停的相依。
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: 引擎自我驗證
         # 監控用的是同一套引擎。引擎壞了就不該相信它的判斷,
@@ -40,7 +47,7 @@ jobs:
 
       - name: 執行監控
         id: monitor
-        run: node monitor/check.js
+        run: node monitor/check.js ${{ inputs.drill && '--drill' || '' }}
 
       - name: 讀取結果
         id: result
@@ -89,6 +96,8 @@ jobs:
           fi
 
       - name: 更新心跳
+        # 演練不寫心跳,避免污染下一次真實比對
+        if: ${{ !inputs.drill }}
         run: |
           set -euo pipefail
           if git diff --quiet -- monitor/heartbeat.json; then

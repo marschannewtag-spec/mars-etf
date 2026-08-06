@@ -177,6 +177,38 @@ describe("監控 · 隱私", () => {
   });
 });
 
+describe("監控 · 演練模式", () => {
+  /* 演練是用來證明通知管道暢通的。它必須:
+     不假造市場狀態、不污染心跳、內容明確標示為非真實警報。
+     這裡驗證 check.js 的 workflow 契約(--drill 旗標與 if 條件)確實存在。 */
+  const fs = require("fs");
+  const path = require("path");
+  const src = fs.readFileSync(path.join(__dirname, "..", "monitor", "check.js"), "utf8");
+  const wf = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "daily-monitor.yml"), "utf8");
+
+  it("演練不得寫入心跳", (a) => {
+    a.match(src, /!DRY\s*&&\s*!DRILL/, "寫心跳的條件必須排除 DRILL");
+    a.match(wf, /if:\s*\$\{\{\s*!inputs\.drill\s*\}\}/, "workflow 的更新心跳步驟必須跳過演練");
+  });
+
+  it("演練通知必須明確標示為非真實警報", (a) => {
+    a.match(src, /非真實警報/);
+    a.match(src, /不需要任何操作/);
+    a.match(src, /level:\s*"drill"/, "層級須為 drill,與真實警報區隔");
+  });
+
+  it("workflow 有暴露 drill 開關", (a) => {
+    a.match(wf, /drill:/);
+    a.match(wf, /--drill/);
+  });
+
+  it("排程執行絕不進入演練模式", (a) => {
+    /* inputs.drill 在 schedule 觸發時為空,不得意外帶入 --drill */
+    a.match(wf, /inputs\.drill\s*&&\s*'--drill'\s*\|\|\s*''/,
+      "必須用條件運算式,排程時要求值為空字串");
+  });
+});
+
 describe("監控 · 多重警報", () => {
   it("同時過期又不一致 → 兩則都要出現", (a) => {
     const prev = evaluate(null, obs(sig()), TODAY).state;

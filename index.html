@@ -461,13 +461,19 @@ $("btnAuto").onclick=async function(){
     if(bad.length||!fin(Q.fx)){toast("報價不完整("+bad.map(function(i){return i.id}).join(",")+"),中止");$("btnAuto").disabled=false;return}
     const capTWD=S.ccy==="USD"?S.cap*Q.fx:S.cap;
     const plan0={units:{},cash:0};let spend=0;
-    let html="<div class='sug hold'>✔ 已自動套用持倉。請至券商執行以下買入;實際成交股數若不同,至設定頁手動校正:</div>";
+    let orders="",same=true;
     for(const i of INST){if(!i.id)continue;const pt=pxTWD(i);
       const sh=Math.floor(capTWD*(1-P.BASE)*i.tgt/INV()/pt);
+      const cur=S.units[i.id]||0, du=sh-cur;
       plan0.units[i.id]=sh;spend+=sh*pt;
-      html+="<div class='sug'>"+i.id+" 買入 "+fmt(sh)+" 股(約 "+fmt(sh*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")</div>";}
+      if(Math.abs(du)*pt>=capTWD*0.002){same=false;
+        orders+="<div class='sug"+(du<0?" sell":"")+"'>"+i.id+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))
+          +" 股(約 "+fmt(Math.abs(du)*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")<br><span style='color:var(--mut);font-size:12px'>目前 "+fmt(cur)+" → 目標 "+fmt(sh)+" 股</span></div>";}
+    }
+    let html="<div class='sug hold'>✔ 目標配置已套用(總資產 "+fmt(capTWD)+" TWD)。以下是<b>與目前持倉的差額</b>,請至券商執行;實際成交不同時至設定頁校正:</div>"
+      +(same?"<div class='sug hold'>目前持倉已符合目標,無需交易。</div>":orders);
     plan0.cash=capTWD-spend;
-    html+="<div class='sug hold'>保留現金 "+fmt(plan0.cash)+" TWD(約 "+(plan0.cash/capTWD*100).toFixed(1)+"%,定存/貨幣基金)</div>";
+    html+="<div class='sug hold'>目標現金 "+fmt(plan0.cash)+" TWD(約 "+(plan0.cash/capTWD*100).toFixed(1)+"%,定存/貨幣基金)。交易完成後帳戶現金應接近此數;若你尚未實際入金,請先確認總資產確實為 "+fmt(capTWD)+" TWD。</div>";
     document.querySelector('[data-v="today"]').click();
     await applyPlan(plan0,"自動分配",html);
   }catch(e){toast("失敗:"+e)}

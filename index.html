@@ -253,10 +253,14 @@ document.querySelectorAll("nav a").forEach(function(a){
     window.scrollTo(0,0);
   };
 });
+/* 「手動校正持有數」的欄位以標的代碼為 key,只有代碼變動時才需要重建 */
+function renderUnits(){
+  $("unitBox").innerHTML=LIVE().map(function(i){return '<div><label>'+esc(i.id)+'</label><input data-u="'+esc(i.id)+'" type="number" value="'+(S.units[i.id]||0)+'"></div>'}).join("");
+}
 function initUI(){
   $("cfgW").value=S.worker; $("cfgCap").value=S.cap?S.cap/10000:""; $("cfgCcy").value=S.ccy||"TWD";
   $("cashTWD").value=((S.cashTWD||0)/10000).toFixed(1); $("cashUSD").value=S.cashUSD||0;
-  $("unitBox").innerHTML=LIVE().map(function(i){return '<div><label>'+esc(i.id)+'</label><input data-u="'+esc(i.id)+'" type="number" value="'+(S.units[i.id]||0)+'"></div>'}).join("");
+  renderUnits();
   var ib="";
   INST.forEach(function(i,ix){
     ib+='<div style="display:grid;grid-template-columns:92px 1fr 62px 76px 36px;gap:6px;margin-bottom:6px">'
@@ -272,7 +276,10 @@ function initUI(){
     var i=INST[+e.dataset.ix];if(!i)return;
     if(e.dataset.if==="tgt")i.tgt=Math.max(0,(+e.value||0)/100);
     else i[e.dataset.if]=e.value.trim();
-    i.src="tw";save();initUI();
+    i.src="tw";save();
+    /* 不可在此重繪 instBox:change 是失焦時才觸發,整區重建會把使用者
+       剛 tab 進去的下一個欄位一起摧毀,導致無法用鍵盤走完一列 */
+    if(e.dataset.if==="id"){e.value=i.id;renderUnits()}
   })});
   $("instBox").querySelectorAll("[data-del]").forEach(function(e){e.onclick=function(){
     if(!confirm("刪除標的 "+(INST[+e.dataset.del].id||"(空白)")+"?"))return;

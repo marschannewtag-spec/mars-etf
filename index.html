@@ -417,12 +417,16 @@ function makePlan(st){
   const V=st.V,cash=st.cash,cf=st.cf,tc=st.tc,dd=st.dd;
   if(st.risk){
     if(cf<P.DEF-0.001){
-      const hold=V-cash, sell=Math.min(P.DEF*V-cash,P.CAP*hold);
+      const hold=V-cash;
+      /* 空手時 hold 為 0,sell/hold 會產生 NaN 並一路寫進持股與現金
+         (JSON 序列化後變成 null)。沒有持股就沒有減碼的餘地,直接返回。 */
+      if(!(hold>0))return{hold:"風險期且目前無持股可減——維持空手等待旗標熄滅"};
+      const sell=Math.min(P.DEF*V-cash,P.CAP*hold);
       const units={},orders=[];let after=0;
       for(const i of LIVE()){
         const pt=pxTWD(i),cur=S.units[i.id]||0;
         if(pt==null){units[i.id]=cur;continue}
-        const nu=Math.floor(cur*pt*(1-sell/hold)/pt);
+        const nu=Math.floor(cur*(1-sell/hold));
         units[i.id]=nu;after+=nu*pt;
         if(cur-nu>0)orders.push({m:esc(i.id)+" 賣出 "+fmt(cur-nu)+" 股(約 "+fmt((cur-nu)*pt)+" TWD)",side:"sell"});
       }

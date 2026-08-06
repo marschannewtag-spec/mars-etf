@@ -225,9 +225,13 @@ if(!S||typeof S!=="object"||Array.isArray(S))S={};
 S.units=S.units||{};S.prem=S.prem||{};S.log=S.log||[];S.peak=Number.isFinite(S.peak)?S.peak:0;
 S.tierTc=Number.isFinite(S.tierTc)?S.tierTc:P.BASE;
 S.worker=S.worker||"https://green-term-c0ddetf2x-worker.marschannewtag.workers.dev";
-if(!Array.isArray(S.inst)||!S.inst.length||!S.inst[0]||!S.inst[0].id)S.inst=DEFAULT_INST.map(function(x){return Object.assign({},x)});
+/* 只有填了代碼的標的才算數:空白列不抓價、不佔權重、不擋月檢 */
+const hasId=function(x){return !!(x&&x.id&&String(x.id).trim())};
+/* 只有「一檔有效標的都沒有」才回退預設值——清空第一列不該把整份清單洗掉 */
+if(!Array.isArray(S.inst)||!S.inst.some(hasId))S.inst=DEFAULT_INST.map(function(x){return Object.assign({},x)});
 const INST=S.inst;
-const INV=function(){var t=0;INST.forEach(function(i){t+=(+i.tgt||0)});return t||0.8};
+const LIVE=function(){return INST.filter(hasId)};
+const INV=function(){var t=0;LIVE().forEach(function(i){t+=(+i.tgt||0)});return t||0.8};
 const $=function(id){return document.getElementById(id)};
 const fin=function(x){return Number.isFinite(x)&&x>0};
 const fmt=function(n,d){d=d||0;return Number.isFinite(n)?n.toLocaleString("zh-TW",{maximumFractionDigits:d,minimumFractionDigits:d}):"—"};
@@ -248,7 +252,7 @@ document.querySelectorAll("nav a").forEach(function(a){
 function initUI(){
   $("cfgW").value=S.worker; $("cfgCap").value=S.cap?S.cap/10000:""; $("cfgCcy").value=S.ccy||"TWD";
   $("cashTWD").value=((S.cashTWD||0)/10000).toFixed(1); $("cashUSD").value=S.cashUSD||0;
-  $("unitBox").innerHTML=INST.map(function(i){return '<div><label>'+i.id+'</label><input data-u="'+i.id+'" type="number" value="'+(S.units[i.id]||0)+'"></div>'}).join("");
+  $("unitBox").innerHTML=LIVE().map(function(i){return '<div><label>'+i.id+'</label><input data-u="'+i.id+'" type="number" value="'+(S.units[i.id]||0)+'"></div>'}).join("");
   var ib="";
   INST.forEach(function(i,ix){
     ib+='<div style="display:grid;grid-template-columns:92px 1fr 62px 76px 36px;gap:6px;margin-bottom:6px">'
@@ -282,7 +286,7 @@ function sanad(x){return fin(x)?x:null}
 async function fetchAll(){
   Q.sig=await j("/signal");
   Q.fx=sanad((await j("/fx")).last[1]);
-  for(const i of INST){
+  for(const i of LIVE()){
     Q.px[i.id]=null;
     try{
       if(i.src==="tw"){const d=await j("/tw?no="+i.id);
@@ -298,7 +302,7 @@ function pxTWD(i){const p=Q.px[i.id];if(!fin(p))return null;return i.src==="us"?
 function valTWD(i){const pt=pxTWD(i);if(pt==null)return null;const r=(S.units[i.id]||0)*pt;return Number.isFinite(r)?r:null}
 function totals(){
   let inv=0,miss=false;
-  for(const i of INST){const v=valTWD(i);if(v==null){if((S.units[i.id]||0)>0)miss=true;continue}inv+=v}
+  for(const i of LIVE()){const v=valTWD(i);if(v==null){if((S.units[i.id]||0)>0)miss=true;continue}inv+=v}
   const cash=(S.cashTWD||0)+((S.cashUSD||0)*(fin(Q.fx)?Q.fx:0)), V=inv+cash;
   return{inv:inv,cash:cash,V:V,miss:miss};
 }
@@ -344,7 +348,7 @@ function render(mutate){
   /* 持倉頁 */
   let coreV=0,satV=0;
   let cards="";
-  for(const i of INST){
+  for(const i of LIVE()){
     const p=Q.px[i.id],v=valTWD(i),w=(fin(V)&&v!=null)?v/V:null;
     if(v!=null){if(i.pocket==="core")coreV+=v;else satV+=v}
     const tg=(1-tc)*i.tgt/INV();
@@ -373,7 +377,7 @@ function makePlan(st){
     if(cf<P.DEF-0.001){
       const hold=V-cash, sell=Math.min(P.DEF*V-cash,P.CAP*hold);
       const units={},orders=[];let after=0;
-      for(const i of INST){
+      for(const i of LIVE()){
         const pt=pxTWD(i),cur=S.units[i.id]||0;
         if(pt==null){units[i.id]=cur;continue}
         const nu=Math.floor(cur*pt*(1-sell/hold)/pt);
@@ -385,10 +389,10 @@ function makePlan(st){
     return{hold:"風險期且現金已達防禦水位——空手等待旗標熄滅,不投入、不再平衡"};
   }
   let act=(dd<=P.T30&&cf>tc*1.05)||Math.abs(cf-tc)>P.DRIFT*tc;
-  for(const i of INST){const v=valTWD(i);if(v==null)continue;const w=v/V,tg=(1-tc)*i.tgt/INV();if(Math.abs(w-tg)>P.DRIFT*tg)act=true;}
+  for(const i of LIVE()){const v=valTWD(i);if(v==null)continue;const w=v/V,tg=(1-tc)*i.tgt/INV();if(Math.abs(w-tg)>P.DRIFT*tg)act=true;}
   if(!act)return{hold:"全部在容忍帶內——本月無動作。論點檢核:逐檔確認否證條件未觸發即續抱"};
   const units={},orders=[];let after=0;
-  for(const i of INST){
+  for(const i of LIVE()){
     const pt=pxTWD(i),cur=S.units[i.id]||0;
     if(pt==null){units[i.id]=cur;continue}
     let nu=Math.floor((1-tc)*i.tgt/INV()*V/pt);
@@ -416,10 +420,11 @@ async function runCheck(){
   $("btnCheck").textContent="抓價中…";
   try{
     await fetchAll();
-    const bad=INST.filter(function(i){return !fin(Q.px[i.id])});
+    const bad=LIVE().filter(function(i){return !fin(Q.px[i.id])});
     const today=new Date(Date.now()+8*3600e3).toISOString().slice(0,10);
     const stale=(Q.sig.asof&&Q.sig.asof.spx)?Math.floor((Date.parse(today)-Date.parse(Q.sig.asof.spx))/864e5):99;
     const blockers=[];
+    if(!LIVE().length)blockers.push("尚未設定任何標的(請至設定頁填入代碼)");
     if(bad.length)blockers.push("報價缺失:"+bad.map(function(i){return i.id}).join("、"));
     if(stale>P.STALE)blockers.push("市場資料過期 "+stale+" 天(asof "+(Q.sig.asof?Q.sig.asof.spx:"?")+")");
     if(!fin(Q.fx))blockers.push("匯率無效");
@@ -457,12 +462,12 @@ $("btnAuto").onclick=async function(){
       document.querySelector('[data-v="today"]').click();
       log("自動分配被風險閘門擋下");$("btnAuto").disabled=false;return;
     }
-    const bad=INST.filter(function(i){return i.id&&!fin(Q.px[i.id])});
+    const bad=LIVE().filter(function(i){return !fin(Q.px[i.id])});
     if(bad.length||!fin(Q.fx)){toast("報價不完整("+bad.map(function(i){return i.id}).join(",")+"),中止");$("btnAuto").disabled=false;return}
     const capTWD=S.ccy==="USD"?S.cap*Q.fx:S.cap;
     const plan0={units:{},cash:0};let spend=0;
     let orders="",same=true;
-    for(const i of INST){if(!i.id)continue;const pt=pxTWD(i);
+    for(const i of LIVE()){const pt=pxTWD(i);
       const sh=Math.floor(capTWD*(1-P.BASE)*i.tgt/INV()/pt);
       const cur=S.units[i.id]||0, du=sh-cur;
       plan0.units[i.id]=sh;spend+=sh*pt;

@@ -1,0 +1,28 @@
+{
+  "_comment": "由 engine/dump-params.js 從 engine.js 產生,請勿手動編輯。修改參數請改 engine.js 的 PARAMS。",
+  "_generatedFrom": "engine/engine.js",
+  "params": {
+    "BASE": 0.2,
+    "DEF": 0.5,
+    "CAP": 0.5,
+    "T30": -0.3,
+    "DRIFT": 0.25,
+    "PREM": 1,
+    "STALE": 4,
+    "LADDER": [
+      [
+        -0.5,
+        0.05
+      ],
+      [
+        -0.4,
+        0.1
+      ]
+    ],
+    "REARM": 0.05,
+    "VIX_THRESHOLD": 32,
+    "SMA_MONTHS": 12,
+    "MIN_TRADE_FRACTION": 0.005,
+    "CASH_EPS": 0.001
+  }
+}

@@ -1,211 +1,7 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>2x 配置台 — 三層攻守引擎</title>
-<meta name="theme-color" content="#0A1322">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="manifest" href='data:application/manifest+json,{"name":"2x 配置台","short_name":"2x配置台","display":"standalone","background_color":"%230A1322","theme_color":"%230A1322","icons":[{"src":"data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27><rect width=%27100%27 height=%27100%27 fill=%27%230A1322%27/><text x=%2750%27 y=%2768%27 font-size=%2752%27 text-anchor=%27middle%27 fill=%27%233DDC97%27 font-family=%27monospace%27>2x</text></svg>","sizes":"any","type":"image/svg+xml"}]}'>
-<style>
-:root{--bg:#0A1322;--card:#0F1B33;--card2:#0C1730;--line:#21304F;--tx:#E8EEF9;--mut:#7C8DB0;
---ok:#3DDC97;--warn:#F5B841;--risk:#FF5D5D;--eyeb:#6E7FB8;--sat:#F5B841;--core:#3DDC97;--cashC:#5B7FD4;
---mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-*{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--tx);font:15px/1.6 "Noto Sans TC",system-ui,sans-serif;padding:22px 14px 92px}
-.wrap{max-width:720px;margin:0 auto}
-.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
-/* header */
-.eyebrow{font-size:10.5px;letter-spacing:.38em;color:var(--eyeb);font-weight:700;margin-bottom:5px}
-.titlebar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-h1{font-size:24px;font-weight:800}
-#btnRefresh{width:auto;padding:8px 16px;border-radius:20px;background:#1B2B4D;color:var(--tx);border:1px solid var(--line);font-size:13px;font-weight:700;cursor:pointer}
-#btnRefresh:disabled{opacity:.5}
-/* cards */
-.card{background:linear-gradient(180deg,#10203B,#0D1830);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px;animation:up .35s ease both}
-@keyframes up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-h2{font-size:11px;letter-spacing:.3em;color:var(--mut);margin-bottom:13px;font-weight:700}
-/* hero */
-.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 13px;border-radius:20px;font-size:13px;font-weight:700}
-.pill.ok{background:rgba(61,220,151,.13);color:var(--ok);border:1px solid rgba(61,220,151,.4)}
-.pill.risk{background:rgba(255,93,93,.13);color:var(--risk);border:1px solid rgba(255,93,93,.45)}
-.hero{display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-top:12px}
-.big{font-family:var(--mono);font-size:56px;font-weight:800;line-height:1}
-.big small{font-size:22px;color:var(--mut);font-weight:600}
-.heroSub{color:var(--mut);font-size:12.5px;margin-top:6px;font-family:var(--mono)}
-/* thermometer */
-.tbar{position:relative;height:10px;border-radius:6px;background:linear-gradient(90deg,#3DDC97,#F5B841 45%,#FF5D5D 80%,#c2185b);margin-top:18px}
-.tmark{position:absolute;top:-5px;width:3px;height:20px;background:#fff;border-radius:2px;box-shadow:0 0 8px #fff;transition:left .5s}
-.ttick{position:absolute;top:-3px;width:1px;height:16px;background:rgba(255,255,255,.35)}
-.tlabels{display:flex;justify-content:space-between;color:var(--mut);font-size:10px;margin-top:6px;font-family:var(--mono)}
-/* chips row */
-.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
-.mchip{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;flex:1;min-width:100px}
-.mchip label{font-size:10px;letter-spacing:.1em;color:var(--mut);display:block;font-weight:700;margin-bottom:3px}
-.mchip b{font-family:var(--mono);font-size:14.5px}
-.mchip small{display:block;color:var(--mut);font-size:10.5px;margin-top:1px}
-/* action */
-.sug{border:1px solid var(--line);border-left:3px solid var(--ok);background:var(--card2);padding:11px 13px;margin:8px 0;border-radius:10px;font-size:13.5px}
-.sug.sell{border-left-color:var(--risk)}.sug.hold{border-left-color:var(--mut);color:var(--mut)}.sug.block{border-left-color:var(--warn);color:var(--warn)}
-button{background:var(--ok);color:#04120c;border:0;border-radius:12px;padding:13px 18px;font:700 15px "Noto Sans TC";width:100%;cursor:pointer}
-button.sec{background:#1B2B4D;color:var(--tx);border:1px solid var(--line)}
-button:disabled{opacity:.4}
-/* allocation bar */
-.alloc{display:flex;height:14px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
-.alloc div{transition:width .5s}
-.legend{display:flex;gap:14px;margin-top:8px;font-size:11.5px;color:var(--mut)}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
-/* holding cards */
-.hcard{background:var(--card2);border:1px solid var(--line);border-radius:13px;padding:13px 14px;margin-bottom:10px}
-.hrow{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.hname{font-weight:700}.hname .nm{color:var(--mut);font-size:11.5px;font-weight:400;margin-left:4px}
-.chip{display:inline-block;padding:2px 8px;border-radius:7px;font-size:10.5px;border:1px solid var(--line);background:rgba(61,220,151,.08);color:var(--core);margin-left:7px;font-weight:700}
-.chip.sat{color:var(--sat);border-color:rgba(245,184,65,.4);background:rgba(245,184,65,.08)}
-.hval{font-family:var(--mono);font-weight:700}
-.hsub{display:flex;justify-content:space-between;color:var(--mut);font-size:12px;font-family:var(--mono);margin-top:3px}
-.wtrack{position:relative;height:7px;background:#0a1428;border:1px solid #1a2848;border-radius:5px;margin-top:9px}
-.wfill{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--core);transition:width .5s}
-.wfill.off{background:var(--warn)}
-.wtick{position:absolute;top:-3px;width:2px;height:13px;background:#fff;opacity:.7;border-radius:1px}
-.hfoot{display:flex;justify-content:space-between;align-items:center;margin-top:9px;font-size:11.5px;color:var(--mut)}
-.hfoot input{width:62px;padding:4px 6px;font-size:12px}
-/* generic */
-table{width:100%;border-collapse:collapse;font-size:13.5px}
-th{color:var(--mut);font-weight:700;text-align:right;padding:6px 4px;border-bottom:1px solid var(--line);font-size:10.5px;letter-spacing:.1em}
-td{padding:9px 4px;text-align:right;border-bottom:1px solid #16233f;font-family:var(--mono)}
-th:first-child,td:first-child{text-align:left;font-family:"Noto Sans TC"}
-tr:last-child td{border-bottom:0}
-.pos{color:var(--ok)}.neg{color:var(--risk)}.wn{color:var(--warn)}
-input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx);border-radius:10px;padding:10px 11px;font-family:var(--mono);width:100%}
-label{font-size:12px;color:var(--mut);display:block;margin:10px 0 4px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.log{font-size:12px;color:var(--mut);border-bottom:1px dashed var(--line);padding:7px 0;font-family:var(--mono)}
-.note{font-size:11px;color:var(--mut);margin-top:10px}
-/* views + nav */
-.view{display:none}.view.active{display:block}
-nav{position:fixed;left:0;right:0;bottom:0;background:rgba(10,19,34,.92);backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:9px 6px calc(9px + env(safe-area-inset-bottom));z-index:8}
-nav a{color:var(--mut);text-decoration:none;font-size:11.5px;text-align:center;flex:1;padding:3px 0;border-radius:10px;font-weight:700}
-nav a span{display:block;font-size:17px;line-height:1.25;font-family:var(--mono)}
-nav a.on{color:var(--ok)}
-#toast{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);background:#1B2B4D;border:1px solid var(--line);padding:10px 18px;border-radius:10px;display:none;font-size:13px;z-index:9}
-@media(max-width:560px){.big{font-size:46px}}
-</style></head>
-<body><div class="wrap">
-<div class="eyebrow">TREND × VIX × TIERS · 三層攻守</div>
-<div class="titlebar"><h1>2x 配置台</h1><button id="btnRefresh">↻ 更新</button></div>
-
-<!-- ═══ 今日 ═══ -->
-<div class="view active" id="view-today">
-  <div class="card">
-    <span class="pill ok" id="lampPill">連線中…</span>
-    <div class="hero">
-      <div>
-        <div class="big" id="heroCash">—<small>%</small></div>
-        <div class="heroSub">現金水位 · 目標 <span id="heroTc">20</span>%</div>
-      </div>
-      <div style="flex:1;min-width:200px">
-        <div class="heroSub" id="lampSub">正在讀取風險旗標</div>
-        <div class="heroSub" id="heroV">組合總值 —</div>
-        <div class="heroSub" id="heroAsof">資料日期 —</div>
-      </div>
-    </div>
-    <div class="tbar">
-      <div class="ttick" style="left:50%"></div><div class="ttick" style="left:66.7%"></div><div class="ttick" style="left:83.3%"></div>
-      <div class="tmark" id="tmark" style="left:0%"></div>
-    </div>
-    <div class="tlabels"><span>0 平靜</span><span>-30 首撥</span><span>-40 ▶10%</span><span>-50 ▶5%</span><span>-60</span></div>
-  </div>
-
-  <div class="card">
-    <h2>市場快照</h2>
-    <div class="chips">
-      <div class="mchip"><label>SPX / MA12</label><b id="vSMA">—</b><small id="vSMAsub">—</small></div>
-      <div class="mchip"><label>VIX · 32</label><b id="vVIX">—</b><small id="vVIXsub">—</small></div>
-      <div class="mchip"><label>USD/TWD</label><b id="vFX">—</b><small>複委託換匯</small></div>
-      <div class="mchip"><label>00653L 扳機</label><b id="vTrip" style="font-size:12.5px">—</b><small id="vTripSub">Brent&gt;90 且 INR&gt;96</small></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>本月行動</h2>
-    <button id="btnCheck">執行月度檢查</button>
-    <div id="sugBox"></div>
-  </div>
-</div>
-
-<!-- ═══ 持倉 ═══ -->
-<div class="view" id="view-hold">
-  <div class="card">
-    <h2>配置總覽 · 核心 55 + 衛星 25 + 現金 20</h2>
-    <div class="alloc"><div id="aCore" style="background:var(--core);width:0"></div><div id="aSat" style="background:var(--sat);width:0"></div><div id="aCash" style="background:var(--cashC);width:0"></div></div>
-    <div class="legend">
-      <span><span class="dot" style="background:var(--core)"></span>核心 <b class="mono" id="lgCore">—</b></span>
-      <span><span class="dot" style="background:var(--sat)"></span>衛星 <b class="mono" id="lgSat">—</b></span>
-      <span><span class="dot" style="background:var(--cashC)"></span>現金 <b class="mono" id="lgCash">—</b></span>
-    </div>
-  </div>
-  <div id="holdCards"></div>
-  <div class="card" id="cashCard">
-    <div class="hrow"><div class="hname">現金 <span class="nm">定存/貨幣基金 · SGOV</span></div><div class="hval" id="cashVal">—</div></div>
-    <div class="hsub"><span id="cashPct">— / 20%</span><span>白桿=目標</span></div>
-    <div class="wtrack"><div class="wfill" id="cashFill" style="background:var(--cashC)"></div><div class="wtick" id="cashTick"></div></div>
-  </div>
-</div>
-
-<!-- ═══ 壓測 ═══ -->
-<div class="view" id="view-stress">
-  <div class="card"><h2>歷史壓力測試(定案 D 引擎)</h2>
-  <table><tbody>
-  <tr><td>1990–2026 全期</td><td>CAGR 15.2% · MaxDD -62.6%</td></tr>
-  <tr><td>2000-03 最壞起點</td><td>最深 -80% · 13.8年 1.09x</td></tr>
-  <tr><td>2015–2026</td><td>CAGR ~20% · MaxDD -36%</td></tr>
-  <tr><td>4年虧損機率</td><td>~13%(MC 5000 路徑)</td></tr></tbody></table></div>
-  <div class="card"><h2>Monte Carlo</h2>
-  <button class="sec" id="btnMC">用目前投入額跑 4 年 Monte Carlo</button>
-  <div id="mcOut" class="mono" style="margin-top:10px;font-size:13px"></div>
-  <div class="note">D_RETS 出處:STEP 3b 全保真引擎月報酬 1990-07~2026-07(432 筆;基準20/防禦50/減碼上限50/VIX32/SMA12)。00988A 席位以 NDX 代理回測,實際含經理人主動風險。</div></div>
-</div>
-
-<!-- ═══ 設定 ═══ -->
-<div class="view" id="view-set">
-  <div class="card"><h2>設定 · 初始化</h2>
-  <label>Worker 網址</label><input id="cfgW">
-  <div class="grid2"><div><label>投入金額(萬)</label><input id="cfgCap" type="number" placeholder="100"></div>
-  <div><label>幣別</label><select id="cfgCcy"><option>TWD</option><option>USD</option></select></div></div>
-  <label>標的配置(目標%為相對權重自動正規化;基準現金固定 20%;換標的直接改此表)</label>
-  <div id="instBox"></div>
-  <button class="sec" id="btnAddInst" style="margin-bottom:8px">＋ 新增標的</button>
-  <label>手動校正持有數(股;實際成交與建議不同時在此修正)</label>
-  <div class="grid2" id="unitBox"></div>
-  <div class="grid2" style="margin-top:6px"><div><label>現金 TWD(萬)</label><input id="cashTWD" type="number" value="0"></div>
-  <div><label>現金 USD</label><input id="cashUSD" type="number" value="0"></div></div>
-  <div style="margin-top:12px"><button id="btnAuto">⚡ 自動分配(依投入金額計算並套用)</button></div></div>
-  <div class="card"><h2>維護</h2>
-  <div class="grid2"><button class="sec" id="btnImport">匯入紀錄 JSON</button><button class="sec" id="btnResetPeak">重設峰值/分層</button></div>
-  <div class="note">重設峰值用於大額入金、ETF 分割/反分割後;匯入用於換裝置/換網域還原資料。</div>
-  <input type="file" id="impFile" accept="application/json" hidden></div>
-</div>
-
-<!-- ═══ 紀錄 ═══ -->
-<div class="view" id="view-log">
-  <div class="card"><h2>Changelog</h2><div id="logBox"></div>
-  <div style="margin-top:12px"><button class="sec" id="btnExport">匯出紀錄 JSON</button></div>
-  <div class="note">建議每次月檢後匯出一份 JSON 備份(localStorage 綁網域,清除即消失)。</div></div>
-</div>
-</div>
-
-<nav>
-  <a href="#" data-v="today" class="on"><span>◉</span>今日</a>
-  <a href="#" data-v="hold"><span>▤</span>持倉</a>
-  <a href="#" data-v="stress"><span>≋</span>壓測</a>
-  <a href="#" data-v="set"><span>⚙</span>設定</a>
-  <a href="#" data-v="log"><span>↺</span>紀錄</a>
-</nav>
-<div id="toast"></div>
-<script src="engine/engine.js"></script>
-<script>
+/* 自動抽取,請勿手動編輯。
+   來源:commit 4916c0a 的 index.html <script> 區塊(重構為共用引擎之前)。
+   用途:平價測試的凍結參照——證明重構後的決策與此完全相同。
+   重新產生:node test/tools/freeze-legacy.js */
 "use strict";
 const D_RETS=[-0.202191, -0.15421, 0.058784, 0.122059, 0.015082, 0.10171, 0.155972, 0.0238, 0.010674, 0.03, -0.114389, 0.071707, 0.005701, 0.013137, -0.000609, -0.063251, 0.170326, 0.052657, 0.01367, -0.021859, -0.079086, 0.004245, -0.07001, -0.000792, -0.020651, 0.016877, 0.020056, 0.058392, -0.004357, 0.016386, 0.011285, 0.046287, -0.045907, 0.057916, -0.027743, -0.022311, 0.064683, 0.004516, 0.025809, -0.008384, 0.131644, 0.091507, -0.035005, -0.102505, -0.000367, 0.021408, -0.028057, 0.034334, 0.051195, -0.036229, 0.028004, -0.050814, 0.014356, -0.037978, 0.049422, 0.01808, 0.029751, 0.02897, 0.06442, 0.079222, 0.008319, 0.027776, 0.000776, 0.002217, 0.012116, 0.012795, 0.049557, 0.003143, 0.145158, 0.024476, 0.002519, -0.099684, 0.035663, 0.11771, 0.002155, 0.119765, -0.026286, 0.126288, -0.04107, -0.067036, 0.129015, 0.090377, 0.044489, 0.18471, -0.079757, 0.001676, -0.112987, 0.025594, -0.047149, 0.058539, 0.152107, 0.022037, -0.005724, -0.064418, 0.08836, 0.021726, -0.23299, 0.104758, 0.031678, 0.126957, 0.143009, 0.142702, -0.098267, 0.134216, 0.025032, -0.030953, 0.142322, -0.043803, 0.054438, -0.024336, 0.091247, 0.123288, 0.26262, -0.018111, 0.157966, 0.05027, -0.1841, -0.127249, 0.103584, -0.079127, 0.117628, -0.169546, -0.123601, -0.121891, -0.043302, 0.067123, -0.108077, -0.053628, 0.036234, -0.018857, -0.017541, -0.039157, -0.036548, -0.063124, 0.026358, 0.043574, 0.017918, -0.002216, -0.010646, 0.022905, -0.019934, -0.013019, -0.035786, -0.027075, -0.002008, -0.028627, 0.013642, 0.020996, -0.015541, 0.00261, -0.008325, -0.005676, 0.004688, 0.140979, 0.061127, 0.088241, 0.097575, -0.038309, 0.13173, -0.014986, 0.080127, 0.033048, 0.005753, -0.025394, -0.046255, 0.009532, 0.043907, -0.103804, -0.015413, 0.034867, 0.045491, 0.087295, 0.069417, -0.082645, 0.01714, -0.044269, -0.078134, 0.115896, -0.01184, 0.093661, -0.018205, 0.047479, -0.046138, 0.120684, 0.022739, 0.056157, -0.026476, 0.047042, 0.02004, -0.122297, -0.012022, -0.050449, 0.074122, 0.06234, 0.064978, 0.0616, 0.002451, 0.021493, -0.029126, 0.00192, 0.074912, 0.056851, 0.016726, -0.006459, 0.009298, 0.076476, 0.090604, -0.103412, -0.006616, -0.103327, -0.016875, -0.005834, 0.058765, 0.023337, -0.088037, -0.005402, 0.003327, -0.106071, -0.110076, -0.043538, 0.008665, -0.024934, -0.021982, 0.038563, 0.052394, 0.032614, 0.000537, 0.04166, 0.002993, 0.072903, -0.06283, 0.069872, 0.099796, -0.104092, 0.034419, 0.131407, 0.020647, -0.144605, -0.045572, 0.054353, -0.085828, 0.109472, 0.06123, 0.00547, 0.087684, 0.023118, 0.024177, -0.017887, 0.037621, -0.030051, -0.033188, -8.4e-05, -0.115786, -0.049254, 0.086998, -0.037057, -0.004238, 0.068879, 0.115009, 0.054147, -0.043362, -0.125607, 0.061257, -0.000541, 0.056794, 0.030499, -0.076235, 0.036351, 0.020067, 0.063581, 0.006237, 0.053999, 0.056154, 0.032981, -0.034447, 0.063182, -0.026619, 0.072399, 0.067734, 0.053182, 0.047524, -0.050863, 0.057832, -0.011111, -0.010818, 0.059158, 0.04803, 0.008086, 0.052143, -0.012995, 0.035317, 0.063931, -0.024962, -0.017643, 0.09558, -0.02737, 0.020229, 0.029992, -0.039606, 0.032767, -0.107858, -0.027555, 0.092062, -0.000636, -0.027711, -0.060232, -0.019406, 0.057477, -0.035792, 0.048827, -0.036277, 0.088372, 0.00973, 0.009332, -0.008722, 0.012444, 0.020548, 0.053392, 0.055751, 0.01716, 0.030371, 0.046532, -0.009644, 0.041966, 0.012164, 0.003634, 0.074233, 0.024137, 0.010158, 0.107064, -0.044562, -0.05207, 0.012377, 0.053197, 0.008293, 0.044703, 0.066968, 0.000105, -0.131775, 0.007305, -0.120329, 0.066077, 0.026839, 0.044507, 0.070331, -0.111474, 0.055381, 0.01621, -0.038327, 0.024156, 0.061015, 0.045984, 0.050994, 0.008129, -0.102219, -0.099287, 0.126543, 0.047851, 0.075923, 0.09682, 0.129197, -0.071644, -0.040058, 0.113432, 0.075736, -0.00373, 0.016866, 0.025894, 0.072194, -0.01181, 0.065659, 0.013738, 0.05709, -0.055197, 0.076612, 0.002187, 0.038246, -0.103679, -0.0548, 0.034992, -0.14882, -0.007833, -0.078598, 0.082202, -0.029054, -0.086637, 0.03595, 0.047931, -0.065762, 0.059895, -0.017856, 0.056958, 0.006109, 0.085667, 0.090336, 0.039996, -0.037271, -0.068757, -0.041991, 0.097279, 0.067006, 0.031805, 0.086978, 0.038093, -0.060653, 0.070723, 0.092893, -0.018852, 0.011304, 0.020899, -0.00965, 0.048605, 0.004032, 0.026292, -0.049632, -0.102985, 0.005965, 0.073144, 0.088474, 0.03463, 0.022757, 0.079624, 0.10996, -0.026877, -0.000103, 0.041798, 0.018119, -0.116444, 0.250547, 0.152762, 0.00984, -0.086416];
 const DEFAULT_INST=[
@@ -215,20 +11,8 @@ const DEFAULT_INST=[
  {id:"00640L",name:"富邦日本正2",tgt:0.10,src:"tw",pocket:"sat"},
  {id:"00988A",name:"統一全球創新主動式",tgt:0.10,src:"tw",pocket:"sat"},
  {id:"00653L",name:"富邦印度正2",tgt:0.05,src:"tw",pocket:"sat"}];
-/* 決策核心一律走共用引擎 engine/engine.js(單一真相),
-   本檔只負責取資料、存狀態與呈現。引擎載入失敗必須大聲失敗——
-   悄悄用舊邏輯或猜一個預設值,等於拿真錢賭。 */
-if(!window.ETFEngine){
-  document.body.innerHTML='<div style="max-width:640px;margin:60px auto;padding:24px;'
-    +'border:1px solid #FF5D5D;border-radius:12px;color:#E8EEF9;font:15px/1.7 system-ui">'
-    +'<h2 style="color:#FF5D5D;letter-spacing:0;font-size:18px;margin-bottom:10px">⛔ 引擎載入失敗</h2>'
-    +'找不到 <code>engine/engine.js</code>。本頁不再是單一檔案,'
-    +'index.html 必須與 engine/ 目錄一起部署。<br><br>'
-    +'在引擎就位前不會顯示任何配置建議。</div>';
-  throw new Error("engine/engine.js 未載入");
-}
-const EG=window.ETFEngine;
-const P=EG.PARAMS;
+const P={BASE:.20,DEF:.50,CAP:.50,T30:-.30,DRIFT:.25,PREM:1.0,STALE:4,
+ LADDER:[[-.50,.05],[-.40,.10]],REARM:.05};
 let S;
 try{S=JSON.parse(localStorage.getItem("etf2x")||"{}")}catch(e){
   try{localStorage.setItem("etf2x.corrupt."+Date.now(),localStorage.getItem("etf2x"))}catch(_){ }
@@ -238,13 +22,15 @@ if(!S||typeof S!=="object"||Array.isArray(S))S={};
 S.units=S.units||{};S.prem=S.prem||{};S.log=S.log||[];S.peak=Number.isFinite(S.peak)?S.peak:0;
 S.tierTc=Number.isFinite(S.tierTc)?S.tierTc:P.BASE;
 S.worker=S.worker||"https://green-term-c0ddetf2x-worker.marschannewtag.workers.dev";
+/* 只有填了代碼的標的才算數:空白列不抓價、不佔權重、不擋月檢 */
+const hasId=function(x){return !!(x&&x.id&&String(x.id).trim())};
 /* 只有「一檔有效標的都沒有」才回退預設值——清空第一列不該把整份清單洗掉 */
-if(!Array.isArray(S.inst)||!S.inst.some(EG.hasId))S.inst=DEFAULT_INST.map(function(x){return Object.assign({},x)});
+if(!Array.isArray(S.inst)||!S.inst.some(hasId))S.inst=DEFAULT_INST.map(function(x){return Object.assign({},x)});
 const INST=S.inst;
-const LIVE=function(){return EG.live(INST)};
-const INV=function(){return EG.weightSum(INST)};
+const LIVE=function(){return INST.filter(hasId)};
+const INV=function(){var t=0;LIVE().forEach(function(i){t+=(+i.tgt||0)});return t||0.8};
 const $=function(id){return document.getElementById(id)};
-const fin=EG.isPos;
+const fin=function(x){return Number.isFinite(x)&&x>0};
 const fmt=function(n,d){d=d||0;return Number.isFinite(n)?n.toLocaleString("zh-TW",{maximumFractionDigits:d,minimumFractionDigits:d}):"—"};
 /* 凡是標的名稱/代碼、changelog、Worker 回傳值進 innerHTML 都要過這一關:
    未跳脫時名稱含 " 會截斷輸入框並在下次存檔寫回損毀值,匯入他人 JSON 更等於執行任意 HTML */
@@ -335,14 +121,36 @@ async function fetchAll(){
   const px={};list.forEach(function(i,ix){px[i.id]=res[ix+2]});
   Q.px=px;
 }
-/* 以下皆為共用引擎的薄包裝:把本檔的可變狀態(S / Q)組成引擎要的 ctx */
-function engCtx(){return{inst:INST,units:S.units,prem:S.prem,prices:Q.px,fx:Q.fx,
-  cashTWD:S.cashTWD,cashUSD:S.cashUSD}}
-function pxTWD(i){return EG.priceTWD(i,Q.px,Q.fx)}
-function valTWD(i){return EG.valueTWD(i,S.units,Q.px,Q.fx)}
-function totals(){return EG.totals(engCtx())}
-function tierTarget(dd,prev){return EG.tierTarget(dd,prev)}
-function sigBad(s){return EG.validateSignal(s)}
+function pxTWD(i){const p=Q.px[i.id];if(!fin(p))return null;return i.src==="us"?(fin(Q.fx)?p*Q.fx:null):p}
+function valTWD(i){const pt=pxTWD(i);if(pt==null)return null;const r=(S.units[i.id]||0)*pt;return Number.isFinite(r)?r:null}
+function totals(){
+  let inv=0,miss=false;
+  for(const i of LIVE()){const v=valTWD(i);if(v==null){if((S.units[i.id]||0)>0)miss=true;continue}inv+=v}
+  const cash=(S.cashTWD||0)+((S.cashUSD||0)*(fin(Q.fx)?Q.fx:0)), V=inv+cash;
+  return{inv:inv,cash:cash,V:V,miss:miss};
+}
+function tierTarget(dd,prev){
+  let want=P.BASE;
+  for(const a of P.LADDER){if(dd<=a[0]){want=a[1];break}}
+  if(want>prev){
+    const cur=P.LADDER.find(function(a){return a[1]===prev});
+    if(cur&&dd<=cur[0]+P.REARM)return prev;
+  }
+  return want;
+}
+/* Worker 回應驗證。整套策略的安全性都掛在 risk_flag 上,欄位缺漏時
+   絕不可讓畫面靜默顯示「正常期」——實測 risk_flag 缺失的畸形回應
+   會讓 SPX 破線 + VIX 45 的盤面顯示成正常期並建議加碼。一律 fail closed。*/
+/* null 與 "" 用 + 轉型都會變成 0 並通過 Number.isFinite,必須先擋掉 */
+const numOk=function(x){return x!=null&&x!==""&&Number.isFinite(+x)};
+function sigBad(s){
+  if(!s||typeof s!=="object"||Array.isArray(s))return "Worker /signal 回應格式錯誤";
+  if(s.risk_flag==null)return "回應缺少風險旗標 risk_flag";
+  if(!s.spx||!numOk(s.spx.last)||!numOk(s.spx.sma12m)||+s.spx.sma12m<=0)return "SPX 資料缺漏或無效";
+  if(!s.vix||!numOk(s.vix.last))return "VIX 資料缺漏或無效";
+  if(!s.asof||!s.asof.spx)return "回應缺少資料日期 asof.spx";
+  return null;
+}
 function render(mutate){
   const s=Q.sig||{},t=totals(),V=t.V,cash=t.cash;
   const spx=s.spx||{},vix=s.vix||{};
@@ -355,15 +163,14 @@ function render(mutate){
     :(risk?"⛔ 風險期 · 凍結投入,僅允許減碼":"✓ 正常期 · 依三層引擎執行");
   $("lampSub").textContent="SPX "+fmt(spxL)+(spx.below?" 破":" > ")+"SMA "+fmt(spxM)+" · VIX "+(Number.isFinite(vixL)?vixL.toFixed(1):"—")+(vix.above?" >32":" <32");
   $("heroAsof").textContent="資料日期 "+((s.asof&&s.asof.spx)||"—")+"(過期>4天中止)";
-  /* 峰值與分層推進交給引擎。只有在資料完整可信時才推進——
-     報價缺失或匯率無效時推進峰值,會把錯誤的低估值記成新峰值。 */
   if(mutate&&!t.miss&&fin(V)&&fin(Q.fx)){
-    const adv=EG.advanceTier(V,{peak:S.peak,tierTc:S.tierTc});
-    S.peak=adv.peak;S.tierTc=adv.tierTc;
+    if(V>=S.peak){S.peak=V;S.tierTc=P.BASE}
+    const d0=S.peak?V/S.peak-1:0;
+    S.tierTc=tierTarget(d0,S.tierTc);
     save();
   }
-  const stx=EG.computeState(engCtx(),{peak:S.peak,tierTc:S.tierTc,signal:s});
-  const dd=stx.dd, cf=stx.cf, tc=stx.tc;
+  const dd=(S.peak&&fin(V))?V/S.peak-1:0;
+  const cf=V?cash/V:0, tc=S.tierTc;
   $("heroCash").innerHTML=(cf*100).toFixed(1)+"<small>%</small>";
   $("heroTc").textContent=(tc*100);
   $("heroV").textContent="組合總值 "+fmt(V)+" TWD · 距峰值 "+(dd*100).toFixed(1)+"%"+(t.miss?" ⚠報價缺":"");
@@ -405,37 +212,45 @@ function render(mutate){
   $("cashTick").style.left=Math.min(tc/0.6*100,100)+"%";
   return{V:V,cash:cash,cf:cf,tc:tc,dd:dd,risk:risk,miss:t.miss};
 }
-/* 引擎回傳結構化訂單,這裡負責轉成畫面上的字串 */
-function orderText(o){
-  return esc(o.id)+(o.side==="buy"?" 買入 ":" 賣出 ")+fmt(o.shares)
-    +" 股(約 "+fmt(o.amount)+" TWD)"+(o.warn==="premium"?" ⚠溢價超標,考慮緩買":"");
-}
-function planHead(plan){
-  if(plan.kind==="trim")
-    return "第三層減碼:拉現金向 "+(plan.targetCash*100)+"%(單次上限=持股 "+(plan.capFraction*100)+"%)";
-  return "再平衡至目標(現金 "+(plan.targetCash*100)+"%"
-    +(plan.tieredBuy?",分層抄底作用中 dd "+(plan.dd*100).toFixed(0)+"%":"")+")";
-}
-/**
- * 決策委由共用引擎,本函式只做兩件事:
- *   1. 把引擎的結構化輸出轉成畫面用的形狀
- *   2. 執行不變量檢查——引擎若產生違反規格的計畫,寧可不下單也不出錯單
- */
 function makePlan(st){
-  const ctx=engCtx();
-  const plan=EG.makePlan(ctx,st);
-  if(plan.kind==="hold")return{hold:plan.message};
-  const bad=EG.checkInvariants(plan,ctx,st);
-  if(bad.length){
-    log("計畫違反不變量,已攔截:"+bad.join(" / "));
-    return{hold:"⛔ 引擎產生的計畫未通過不變量檢查,已攔截不予顯示:"+bad.join(";")
-      +"。請回報此情況,勿手動推算下單。"};
+  const V=st.V,cash=st.cash,cf=st.cf,tc=st.tc,dd=st.dd;
+  if(st.risk){
+    if(cf<P.DEF-0.001){
+      const hold=V-cash;
+      /* 空手時 hold 為 0,sell/hold 會產生 NaN 並一路寫進持股與現金
+         (JSON 序列化後變成 null)。沒有持股就沒有減碼的餘地,直接返回。 */
+      if(!(hold>0))return{hold:"風險期且目前無持股可減——維持空手等待旗標熄滅"};
+      const sell=Math.min(P.DEF*V-cash,P.CAP*hold);
+      const units={},orders=[];let after=0;
+      for(const i of LIVE()){
+        const pt=pxTWD(i),cur=S.units[i.id]||0;
+        if(pt==null){units[i.id]=cur;continue}
+        const nu=Math.floor(cur*(1-sell/hold));
+        units[i.id]=nu;after+=nu*pt;
+        if(cur-nu>0)orders.push({m:esc(i.id)+" 賣出 "+fmt(cur-nu)+" 股(約 "+fmt((cur-nu)*pt)+" TWD)",side:"sell"});
+      }
+      return{orders:orders,units:units,cash:V-after,head:"第三層減碼:拉現金向 50%(單次上限=持股 50%)",headSide:"sell"};
+    }
+    return{hold:"風險期且現金已達防禦水位——空手等待旗標熄滅,不投入、不再平衡"};
   }
-  return{
-    orders:plan.orders.map(function(o){return{m:orderText(o),side:o.side}}),
-    units:plan.units,cash:plan.cash,
-    head:planHead(plan),headSide:plan.kind==="trim"?"sell":"buy"
-  };
+  let act=(dd<=P.T30&&cf>tc*1.05)||Math.abs(cf-tc)>P.DRIFT*tc;
+  for(const i of LIVE()){const v=valTWD(i);if(v==null)continue;const w=v/V,tg=(1-tc)*i.tgt/INV();if(Math.abs(w-tg)>P.DRIFT*tg)act=true;}
+  if(!act)return{hold:"全部在容忍帶內——本月無動作。論點檢核:逐檔確認否證條件未觸發即續抱"};
+  const units={},orders=[];let after=0;
+  for(const i of LIVE()){
+    const pt=pxTWD(i),cur=S.units[i.id]||0;
+    if(pt==null){units[i.id]=cur;continue}
+    let nu=Math.floor((1-tc)*i.tgt/INV()*V/pt);
+    if(Math.abs(nu-cur)*pt<V*0.005)nu=cur;
+    units[i.id]=nu;after+=nu*pt;
+    if(nu!==cur){
+      const du=nu-cur;
+      const warn=((S.prem[i.id]||0)>P.PREM&&du>0)?" ⚠溢價超標,考慮緩買":"";
+      orders.push({m:esc(i.id)+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))+" 股(約 "+fmt(Math.abs(du)*pt)+" TWD)"+warn,side:du>0?"buy":"sell"});
+    }
+  }
+  if(!orders.length)return{hold:"整數化後無需交易——本月無動作"};
+  return{orders:orders,units:units,cash:V-after,head:"再平衡至目標(現金 "+(tc*100)+"%"+(dd<=P.T30?",分層抄底作用中 dd "+(dd*100).toFixed(0)+"%":"")+")",headSide:"buy"};
 }
 async function applyPlan(plan,tag,keepHtml){
   for(const k in plan.units)S.units[k]=plan.units[k];
@@ -573,4 +388,3 @@ document.addEventListener("change",function(e){if(e.target.matches("input,select
     else render(false);
   }catch(e){const p=$("lampPill");p.className="pill risk";p.textContent="⛔ 無法連線 Worker";$("lampSub").textContent=String(e)}
 })();
-</script></body></html>

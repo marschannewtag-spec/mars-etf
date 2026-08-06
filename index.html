@@ -581,7 +581,9 @@ initUI();
 document.addEventListener("change",function(e){if(e.target.matches("input,select")&&!e.target.dataset.p&&e.target.id!=="impFile")readUI()});
 (async function(){
   try{
-    Q.sig=await j("/signal");Q.fx=sanad((await j("/fx")).last[1]);
+    /* 與 fetchAll 一致:/fx 回應缺 last 欄位時降為 null,不要整段開機失敗 */
+    Q.sig=await j("/signal");
+    Q.fx=await j("/fx").then(function(d){return sanad(d&&d.last&&d.last[1])},function(){return null});
     const sigErr=sigBad(Q.sig);
     /* 燈號由 render 依 sigBad 自行 fail closed,這裡只補上具體原因 */
     if(sigErr){render(false);$("lampSub").textContent=sigErr;return}

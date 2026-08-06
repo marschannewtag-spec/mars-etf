@@ -241,13 +241,13 @@ document.querySelectorAll("nav a").forEach(function(a){
 });
 function initUI(){
   $("cfgW").value=S.worker; $("cfgCap").value=S.cap?S.cap/10000:""; $("cfgCcy").value=S.ccy||"TWD";
-  $("cashTWD").value=(S.cashTWD||0)/10000; $("cashUSD").value=S.cashUSD||0;
+  $("cashTWD").value=((S.cashTWD||0)/10000).toFixed(1); $("cashUSD").value=S.cashUSD||0;
   $("unitBox").innerHTML=INST.map(function(i){return '<div><label>'+i.id+'</label><input data-u="'+i.id+'" type="number" value="'+(S.units[i.id]||0)+'"></div>'}).join("");
   renderLog();
 }
 function readUI(){
   S.worker=$("cfgW").value.trim().replace(/\/+$/,"");S.cap=(+$("cfgCap").value||0)*10000;S.ccy=$("cfgCcy").value;
-  S.cashTWD=(+$("cashTWD").value||0)*10000;S.cashUSD=+$("cashUSD").value||0;
+  S.cashTWD=Math.round((+$("cashTWD").value||0)*10)*1000;S.cashUSD=+$("cashUSD").value||0;
   document.querySelectorAll("[data-u]").forEach(function(e){S.units[e.dataset.u]=Math.max(0,Math.floor(+e.value||0))});save();
 }
 async function j(p){const r=await fetch(S.worker+p,{signal:AbortSignal.timeout(15000),cache:"no-store"});if(!r.ok)throw p+" "+r.status;return r.json()}
@@ -378,7 +378,7 @@ function makePlan(st){
 }
 function applyPlan(plan,tag){
   for(const k in plan.units)S.units[k]=plan.units[k];
-  S.cashTWD=Math.max(0,Math.round(plan.cash-(S.cashUSD||0)*(fin(Q.fx)?Q.fx:0)));
+  S.cashTWD=Math.max(0,Math.round((plan.cash-(S.cashUSD||0)*(fin(Q.fx)?Q.fx:0))/1000)*1000);
   save();initUI();toast("持倉已自動套用");log("一鍵套用:"+tag);
   runCheck();
 }

@@ -36,6 +36,22 @@ node engine/dump-params.js    # 參數改動後重新產生 engine.json
 
 改動引擎後 `node test/run.js` 必須全綠才可部署。
 
+## CI
+
+`.github/workflows/ci.yml` 在每次 push(心跳除外)與 PR 執行四道關卡:
+
+1. 引擎測試(94 項離線)
+2. `engine.json` 與 `engine.js` 的 PARAMS 同步檢查
+3. `index.html` 內嵌 script 語法檢查
+4. 確認 index.html 仍引用共用引擎、`.nojekyll` 仍在
+
+**CI 刻意不跑資料契約測試** —— 那需連網,上游抖動會造成與程式碼無關的紅燈,
+被忽略的紅燈等於沒有 CI。契約檢查放在每日監控,失敗轉為通知。
+測試有釘住這個決定,不要「順手」把 `--contract` 加進 CI。
+
+CI 是唯一擋在「壞掉的引擎」與「上線」之間的關卡——
+index.html 由 GitHub Pages 從 main 直接服務,沒有其他審核環節。
+
 ## 部署
 
 線上版:https://marschannewtag-spec.github.io/mars-etf/(GitHub Pages,main 分支根目錄)

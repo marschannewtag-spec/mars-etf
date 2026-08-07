@@ -173,6 +173,27 @@ function evaluate(prev, obs, today) {
   return { alerts, state };
 }
 
+/**
+ * 把資料契約測試的失敗轉成一則警報。
+ *
+ * 契約測試需連網,放進 CI 會因上游抖動造成與程式碼無關的紅燈,
+ * 那種紅燈久了就會被忽略。改在每日監控裡跑,失敗轉為通知。
+ *
+ * @param log 測試輸出(可能含 ANSI 色碼)
+ */
+function contractAlert(log) {
+  const clean = String(log || "").replace(/\x1b\[[0-9;]*m/g, "");
+  const failed = clean.split("\n").filter(l => l.includes("✗")).map(l => l.trim());
+  return {
+    level: "contract-test",
+    title: "上游資料契約檢查失敗",
+    detail: "Worker 端點的結構或數值範圍不再符合預期,通常代表上游 Yahoo / TWSE 改了回應格式。\n\n"
+      + "**配置台可能因此無法產生建議。** 風險旗標的判斷未必受影響,請以本則通知內的市場狀態為準。\n\n"
+      + (failed.length ? "失敗項目:\n" + failed.map(l => "- " + l.replace(/^✗\s*/, "")).join("\n") + "\n\n" : "")
+      + "重跑:`node test/run.js --contract`"
+  };
+}
+
 function reasonText(s) {
   const reasons = [];
   if (s.spxBelow) reasons.push(`SPX ${s.spxLast} 跌破 12 月均線 ${s.spxSma12m}`);
@@ -191,6 +212,13 @@ async function main() {
 
   const obs = await observe();
   const { alerts, state } = evaluate(prev, obs, taipeiToday());
+
+  /* 契約測試由 workflow 以非致命方式先跑,結果經環境變數帶進來 */
+  if (process.env.CONTRACT_FAILED === "1") {
+    let log = "";
+    try { log = fs.readFileSync(process.env.CONTRACT_LOG || "", "utf8"); } catch (e) { /* 無日誌照樣通知 */ }
+    alerts.push(contractAlert(log));
+  }
 
   /* 演練:強制發一則通知,確認 Issue 真的開得起來、手機真的收得到。
      不動心跳,也不假造市場狀態——內容明確標示為演練,不會被誤讀成真警報。 */
@@ -240,4 +268,4 @@ if (require.main === module) {
   main().catch(e => { console.error("監控本身出錯:", e); process.exit(1); });
 }
 
-module.exports = { evaluate, reasonText };
+module.exports = { evaluate, reasonText, contractAlert };

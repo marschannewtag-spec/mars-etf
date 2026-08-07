@@ -1,0 +1,65 @@
+name: CI
+
+# 每次 push 與 PR 都跑。這是唯一擋在「壞掉的引擎」與「上線」之間的關卡——
+# index.html 由 GitHub Pages 從 main 直接服務,沒有其他審核環節。
+#
+# 刻意只跑離線測試:資料契約測試需連網,上游抖動會造成與程式碼無關的紅燈,
+# 那種紅燈久了就會被忽略。契約檢查放在每日監控,失敗轉為通知。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: 引擎測試(黃金案例 / 不變量 / 平價 / 監控 / 資料集)
+        run: node test/run.js
+
+      - name: engine.json 與 engine.js 同步檢查
+        # 改了 PARAMS 卻忘了重新產生 engine.json,回測端會拿到舊參數且無任何錯誤訊息
+        run: node engine/dump-params.js --check
+
+      - name: index.html 語法檢查
+        # 單引號地獄容易在手改時打錯,而語法錯誤會讓整個 PWA 白畫面
+        run: |
+          node -e '
+            const fs = require("fs"), vm = require("vm");
+            const html = fs.readFileSync("index.html", "utf8");
+            const scripts = [...html.matchAll(/<script(?:\s+src="[^"]*")?>([\s\S]*?)<\/script>/g)];
+            let checked = 0;
+            for (const m of scripts) {
+              if (!m[1].trim()) continue;
+              new vm.Script(m[1]);
+              checked++;
+            }
+            if (!checked) throw new Error("找不到內嵌 script,選擇器可能失效");
+            console.log("index.html 內嵌 script 語法通過(" + checked + " 段)");
+          '
+
+      - name: PWA 必須引用共用引擎
+        # 防止有人把決策邏輯又寫回 index.html,重建重複實作
+        run: |
+          set -euo pipefail
+          grep -q 'src="engine/engine.js"' index.html \
+            || { echo "index.html 未引用 engine/engine.js"; exit 1; }
+          test -f .nojekyll \
+            || { echo ".nojekyll 遺失,GitHub Pages 可能不發布 engine/ 目錄"; exit 1; }
+          echo "共用引擎引用與 .nojekyll 皆就位"

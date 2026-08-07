@@ -41,12 +41,54 @@ jobs:
           node-version: "24"
 
       - name: 引擎自我驗證
-        # 監控用的是同一套引擎。引擎壞了就不該相信它的判斷,
-        # 先跑離線測試(黃金案例/不變量/平價),不過就中止。
-        run: node test/run.js
+        # 監控用的是同一套引擎,引擎壞了就不該相信它的判斷。
+        # 但「測試失敗就整個中止」會讓你連市場警報一起失去——
+        # 失敗必須自己變成一則通知,不能只是靜靜地讓 job 紅掉。
+        id: selftest
+        continue-on-error: true
+        run: node test/run.js 2>&1 | tee /tmp/selftest.log
+
+      - name: 引擎測試失敗 → 通知並中止
+        if: steps.selftest.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## ⛔ 引擎測試失敗,每日監控已暫停"
+            echo ""
+            echo "共用引擎的離線測試未通過,本次**沒有執行市場檢查**。"
+            echo "在修復前你不會收到風險旗標翻轉等通知,請勿依配置台的建議操作。"
+            echo ""
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' /tmp/selftest.log | tail -60
+            echo '```'
+            echo ""
+            echo "重跑:\`node test/run.js\`"
+          } > /tmp/selftest-issue.md
+          TITLE="引擎測試失敗,監控暫停"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file /tmp/selftest-issue.md
+          else
+            gh issue create --title "[$(date -u -d '+8 hours' '+%Y-%m-%d %H:%M')] $TITLE" \
+              --body-file /tmp/selftest-issue.md --label 監控 || \
+            gh issue create --title "[$(date -u -d '+8 hours' '+%Y-%m-%d %H:%M')] $TITLE" \
+              --body-file /tmp/selftest-issue.md
+          fi
+          exit 1
+
+      - name: 資料契約檢查
+        # 需連網,上游抖動不該讓監控中止——失敗轉為通知
+        id: contract
+        continue-on-error: true
+        run: node test/run.js --contract --only 資料契約 2>&1 | tee /tmp/contract.log
 
       - name: 執行監控
         id: monitor
+        env:
+          CONTRACT_FAILED: ${{ steps.contract.outcome == 'failure' && '1' || '0' }}
+          CONTRACT_LOG: /tmp/contract.log
         run: node monitor/check.js ${{ inputs.drill && '--drill' || '' }}
 
       - name: 讀取結果

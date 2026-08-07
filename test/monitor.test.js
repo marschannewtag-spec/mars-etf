@@ -209,6 +209,71 @@ describe("監控 · 演練模式", () => {
   });
 });
 
+describe("監控 · 契約測試失敗轉警報", () => {
+  const { contractAlert } = require("../monitor/check.js");
+
+  it("失敗項目會被萃取進通知內文", (a) => {
+    const log = "\x1b[1m資料契約 · /signal\x1b[0m\n"
+      + "  \x1b[32m✓\x1b[0m 回應可取得且通過引擎驗證\n"
+      + "  \x1b[31m✗\x1b[0m 數值落在合理範圍(超出即代表上游資料異常)\n"
+      + "  \x1b[31m✗\x1b[0m 布林旗標與底層數值自洽\n";
+    const al = contractAlert(log);
+    a.strictEqual(al.level, "contract-test");
+    a.match(al.detail, /數值落在合理範圍/);
+    a.match(al.detail, /布林旗標與底層數值自洽/);
+    a.ok(!al.detail.includes("回應可取得且通過引擎驗證"), "通過的項目不該出現在失敗清單");
+  });
+
+  it("ANSI 色碼必須清掉(Issue 內文不該有亂碼)", (a) => {
+    const al = contractAlert("\x1b[31m✗\x1b[0m 某項失敗\n");
+    a.ok(!/\x1b\[/.test(al.detail), "殘留 ANSI escape");
+  });
+
+  it("拿不到日誌時仍要發出通知", (a) => {
+    const al = contractAlert("");
+    a.strictEqual(al.level, "contract-test");
+    a.match(al.detail, /上游/);
+  });
+
+  it("通知須說明風險旗標未必受影響(避免誤判為停機)", (a) => {
+    a.match(contractAlert("").detail, /風險旗標的判斷未必受影響/);
+  });
+});
+
+describe("監控 · workflow 韌性契約", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const wf = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "daily-monitor.yml"), "utf8");
+  const ci = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
+
+  it("引擎測試失敗不得靜默中止,必須開 Issue", (a) => {
+    a.match(wf, /id:\s*selftest/);
+    a.match(wf, /continue-on-error:\s*true/);
+    a.match(wf, /steps\.selftest\.outcome\s*==\s*'failure'/);
+    a.match(wf, /gh issue create/, "失敗時必須開 Issue,不能只讓 job 紅掉");
+  });
+
+  it("契約測試不得中止監控", (a) => {
+    a.match(wf, /id:\s*contract/);
+    a.match(wf, /CONTRACT_FAILED/);
+  });
+
+  it("CI 在 push 與 PR 都要跑", (a) => {
+    a.match(ci, /push:/);
+    a.match(ci, /pull_request:/);
+    a.match(ci, /node test\/run\.js/);
+  });
+
+  it("CI 必須檢查 engine.json 同步與 .nojekyll", (a) => {
+    a.match(ci, /dump-params\.js --check/);
+    a.match(ci, /\.nojekyll/);
+  });
+
+  it("CI 不得跑需連網的契約測試(避免上游抖動造成假性紅燈)", (a) => {
+    a.ok(!/--contract/.test(ci), "契約測試應留在每日監控,不放 CI");
+  });
+});
+
 describe("監控 · 多重警報", () => {
   it("同時過期又不一致 → 兩則都要出現", (a) => {
     const prev = evaluate(null, obs(sig()), TODAY).state;

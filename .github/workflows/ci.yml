@@ -9,6 +9,9 @@ name: CI
 on:
   push:
     branches: [main]
+    # 每日心跳是機器人寫的狀態檔,不含程式碼,不需要跑 CI
+    paths-ignore:
+      - "monitor/heartbeat.json"
   pull_request:
     branches: [main]
   workflow_dispatch:

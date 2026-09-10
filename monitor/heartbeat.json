@@ -1,14 +1,14 @@
 {
-  "checkedAt": "2026-09-09 20:31",
-  "asof": "2026-09-08",
+  "checkedAt": "2026-09-10 20:24",
+  "asof": "2026-09-09",
   "riskFlag": false,
-  "spxLast": 7673.52,
-  "spxSma12m": 7168.25,
+  "spxLast": 7636.3599,
+  "spxSma12m": 7165.16,
   "spxBelow": false,
-  "vixLast": 16.56,
+  "vixLast": 17.02,
   "vixAbove": false,
   "tripwireArmed": false,
-  "brent": 100.69,
-  "usdinr": 95.11,
-  "fx": 31.441
+  "brent": 104.11,
+  "usdinr": 95.43,
+  "fx": 31.63
 }

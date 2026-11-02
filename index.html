@@ -171,20 +171,56 @@ td{padding:12px 0;text-align:right;border-top:1px solid var(--rule);
   font-family:var(--mono);font-variant-numeric:tabular-nums}
 th:first-child,td:first-child{text-align:left;font-family:var(--sans)}
 .pos{color:var(--positive)}.neg{color:var(--negative)}.wn{color:var(--warning)}
-input,select{background:var(--ground);border:1px solid var(--control);color:var(--text);
+input,select,textarea{background:var(--ground);border:1px solid var(--control);color:var(--text);
   border-radius:var(--radius-input);padding:0 11px;height:40px;width:100%;
   font:var(--fs-body)/1 var(--mono);font-variant-numeric:tabular-nums}
+textarea{height:auto;padding:10px 11px;line-height:1.5;resize:vertical}
+/* 解析結果:確認過才寫入,所以先用一張表把「現在 → 解析出來」攤開 */
+.prev{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px}
+.prev th{font-size:var(--fs-small);color:var(--muted);font-weight:400;text-align:right;padding:0 0 8px}
+.prev th:first-child{text-align:left}
+.prev td{padding:9px 0;text-align:right;border-top:1px solid var(--rule);
+  font-family:var(--mono);font-variant-numeric:tabular-nums}
+.prev td:first-child{text-align:left;font-family:var(--sans)}
+.prev tr.unsure td{color:var(--warning)}
+/* 持倉卡的第二行:成本與未實現損益 */
+.hcost{display:flex;justify-content:space-between;color:var(--muted);font-size:var(--fs-small);
+  font-family:var(--mono);font-variant-numeric:tabular-nums;margin-top:4px}
 input:focus-visible,select:focus-visible,button:focus-visible,nav a:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
 label{font-size:var(--fs-small);color:var(--muted);display:block;margin:16px 0 8px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .log{font-size:13px;color:var(--muted);padding:9px 0;border-top:1px solid var(--rule);
   font-family:var(--mono);font-variant-numeric:tabular-nums}
-.note{font-size:13px;color:var(--muted);margin-top:14px;line-height:1.6}
+.note{font-size:13px;color:var(--muted);margin-top:14px;line-height:1.6;max-width:72ch}
 code{font-family:var(--mono);background:var(--raised);padding:1px 5px;border-radius:3px}
 .sec-row{display:grid;gap:var(--gap);grid-template-columns:320px 1fr;align-items:start}
 .sec-row>.lab{font-size:13px;color:var(--muted);line-height:1.6}
 .sec-row>.lab b{display:block;font-size:16px;font-weight:600;color:var(--text);margin-bottom:6px}
+/* 標的列:五個控制項擠一列,只有卡片夠寬時名稱欄才放得下。1240px 以下
+   (手機全部、以及側欄仍在的 901–1240px)名稱欄會被壓成 2–36px 的碎片,
+   名稱完全看不到也改不了——實測 390px 時溢出 211px。所以窄的時候拆兩行。 */
+.instrow{display:grid;gap:6px;margin-bottom:6px;
+  grid-template-columns:92px minmax(140px,1fr) 62px 76px 56px}
+.instrow button{height:40px;padding:0;font-size:12px}
+@media(max-width:1240px){
+  .instrow{grid-template-columns:1fr 76px 72px;
+    grid-template-areas:"code code pct" "name pocket del"}
+  .instrow>:nth-child(1){grid-area:code}
+  .instrow>:nth-child(2){grid-area:name}
+  .instrow>:nth-child(3){grid-area:pct}
+  .instrow>:nth-child(4){grid-area:pocket}
+  .instrow>:nth-child(5){grid-area:del}
+}
+/* 首列五格在 1240px 以下會讓 7 位數的組合總值撞進隔壁格(實測 1024px 溢出
+   32px),改成 3+2 兩列。901px 以下另有兩欄規則,所以這段要限定下界。 */
+@media(min-width:901px) and (max-width:1240px){
+  .strip.lead{grid-template-columns:repeat(3,1fr)}
+  .strip.lead>div:nth-child(4){border-left:0;padding-left:0}
+  .strip.lead>div:nth-child(n+4){border-top:1px solid var(--rule);padding-top:14px;margin-top:14px}
+  /* 同樣的寬度下,壓測的 1.4fr 欄只剩 430px,表格每一格都在折行 */
+  .cols{grid-template-columns:1fr}
+}
 
 /* ── 控制項:強調靠反白,不靠顏色 ─────────────────────────── */
 button{height:var(--control-h);padding:0 16px;border:1px solid transparent;
@@ -205,7 +241,7 @@ button.wide{width:100%}
 
 /* ── 手機:側欄收成底欄 ───────────────────────────────────── */
 @media(max-width:900px){
-  :root{--pad:16px;--gap:16px}
+  :root{--pad:16px;--gap:16px;--control-h:42px}
   .shell{grid-template-columns:1fr}
   nav{flex-direction:row;position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;
     gap:4px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));
@@ -226,16 +262,16 @@ button.wide{width:100%}
   .strip.snap{grid-template-columns:1fr}
   .strip.snap>div{border-left:0;padding-left:0;border-top:1px solid var(--rule)}
   .strip.snap>div:first-child{border-top:0}
-  .strip.quad{grid-template-columns:1fr}
-  .strip.quad>div{border-left:0;padding-left:0;border-top:1px solid var(--rule)}
-  .strip.quad>div:first-child{border-top:0}
   #toast{bottom:88px}
+}
+/* 360 / 375px 的手機:首列兩欄時每格只剩 126px,26px 的 7 位數會切掉右邊。
+   實測 22px + 12px 內縮可容納 10 個字元(八位數的總值);九位數仍會溢出。 */
+@media(max-width:389px){
+  .strip.lead b{font-size:22px}
+  .strip>div:nth-child(2),.strip>div:nth-child(4){padding-left:12px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 .strip.lead b{font-size:26px}
-.strip.quad{grid-template-columns:1fr 1fr}
-.strip.quad>div:nth-child(odd){border-left:0;padding-left:0}
-.strip.quad>div:nth-child(n+3){border-top:1px solid var(--rule)}
 .card>label:first-child{margin-top:0}
 
 </style></head>
@@ -312,25 +348,34 @@ button.wide{width:100%}
 <div class="view" id="view-hold">
   <div class="titlebar"><div class="lead">
     <h1>持倉</h1>
-    <div class="heroSub">核心 55 + 衛星 25 + 現金 20。白刻度是目標權重,橘色代表超出 25% 容忍帶</div>
+    <div class="heroSub" id="holdPnl">白刻度是目標權重,橘色代表超出 25% 容忍帶</div>
   </div></div>
 
   <div class="card" style="margin-bottom:var(--gap)">
     <h2>配置總覽</h2>
-    <div class="alloc"><div id="aCore" style="background:var(--positive);width:0"></div><div id="aSat" style="background:var(--warning);width:0"></div><div id="aCash" style="background:var(--control);width:0"></div></div>
+    <div class="alloc"><div id="aCore" style="background:var(--positive);width:0"></div><div id="aSat" style="background:var(--muted);width:0"></div><div id="aCash" style="background:var(--control);width:0"></div></div>
     <div class="legend">
       <span><span class="dot" style="background:var(--positive)"></span>核心 <b id="lgCore">—</b></span>
-      <span><span class="dot" style="background:var(--warning)"></span>衛星 <b id="lgSat">—</b></span>
+      <span><span class="dot" style="background:var(--muted)"></span>衛星 <b id="lgSat">—</b></span>
       <span><span class="dot" style="background:var(--control)"></span>現金 <b id="lgCash">—</b></span>
     </div>
   </div>
 
   <div class="holds" id="holdCards"></div>
 
-  <div class="card" id="cashCard">
+  <div class="card" id="cashCard" style="margin-bottom:var(--gap)">
     <div class="hrow"><div class="hname">現金 <span class="nm">定存 / 貨幣基金 · SGOV</span></div><div class="hval" id="cashVal">—</div></div>
     <div class="hsub"><span id="cashPct">— / 20%</span><span>白刻度 = 目標</span></div>
     <div class="wtrack"><div class="wfill" id="cashFill"></div><div class="wtick" id="cashTick"></div></div>
+  </div>
+
+  <div class="card">
+    <h2>加碼試算</h2>
+    <div class="grid2">
+      <div><label for="addCash">要加碼的金額(TWD)</label><input id="addCash" type="number" placeholder="100000"></div>
+      <div style="display:flex;align-items:flex-end"><button class="sec wide" id="btnAdd">算這筆錢該怎麼分</button></div>
+    </div>
+    <div id="addOut"></div>
   </div>
 </div>
 
@@ -399,6 +444,16 @@ button.wide{width:100%}
     </div>
 
     <div class="sec-row">
+      <div class="lab"><b>從券商貼上庫存</b>把券商 App 的庫存畫面整段複製貼進來,會解析出股數與成本。解析結果一定要先確認才會寫入——認錯一個數字就會算出錯的下單清單。</div>
+      <div class="card">
+        <label for="pasteBox">券商庫存(整段貼上)</label>
+        <textarea id="pasteBox" rows="4" placeholder="例:某某正2 1,000 -5,000 現股 00xxxL 100,000 -4.76%"></textarea>
+        <div style="margin-top:14px"><button class="sec" id="btnParse">解析</button></div>
+        <div id="pasteOut"></div>
+      </div>
+    </div>
+
+    <div class="sec-row">
       <div class="lab"><b>持有數與現金</b>實際成交與建議不同時在此校正。自動分配會依投入金額算出目標股數並直接套用。</div>
       <div class="card">
         <label>持有數(股)</label>
@@ -441,7 +496,7 @@ button.wide{width:100%}
 
 </div></main>
 </div>
-<div id="toast"></div>
+<div id="toast" role="status"></div>
 <script src="engine/engine.js"></script>
 <script>
 "use strict";
@@ -487,7 +542,7 @@ try{S=JSON.parse(localStorage.getItem("etf2x")||"{}")}catch(e){
   S={};setTimeout(function(){toast("儲存資料毀損,已隔離備份並以預設值啟動")},0);
 }
 if(!S||typeof S!=="object"||Array.isArray(S))S={};
-S.units=S.units||{};S.prem=S.prem||{};S.log=S.log||[];S.peak=Number.isFinite(S.peak)?S.peak:0;
+S.units=S.units||{};S.cost=S.cost||{};S.prem=S.prem||{};S.log=S.log||[];S.peak=Number.isFinite(S.peak)?S.peak:0;
 S.tierTc=Number.isFinite(S.tierTc)?S.tierTc:P.BASE;
 S.worker=S.worker||"https://green-term-c0ddetf2x-worker.marschannewtag.workers.dev";
 /* 只有「一檔有效標的都沒有」才回退預設值——清空第一列不該把整份清單洗掉 */
@@ -497,6 +552,8 @@ const LIVE=function(){return EG.live(INST)};
 const INV=function(){return EG.weightSum(INST)};
 const $=function(id){return document.getElementById(id)};
 const fin=EG.isPos;
+/* 台北時間的今天:引擎用它比對 asof 判斷過期,用 UTC 會在台灣的凌晨差一天 */
+const todayTPE=function(){return new Date(Date.now()+8*3600e3).toISOString().slice(0,10)};
 const fmt=function(n,d){d=d||0;return Number.isFinite(n)?n.toLocaleString("zh-TW",{maximumFractionDigits:d,minimumFractionDigits:d}):"—"};
 /* 凡是標的名稱/代碼、changelog、Worker 回傳值進 innerHTML 都要過這一關:
    未跳脫時名稱含 " 會截斷輸入框並在下次存檔寫回損毀值,匯入他人 JSON 更等於執行任意 HTML */
@@ -526,12 +583,12 @@ function initUI(){
   renderUnits();
   var ib="";
   INST.forEach(function(i,ix){
-    ib+='<div style="display:grid;grid-template-columns:92px 1fr 62px 76px 56px;gap:6px;margin-bottom:6px">'
+    ib+='<div class="instrow">'
       +'<input data-if="id" data-ix="'+ix+'" value="'+esc(i.id)+'" placeholder="代碼">'
       +'<input data-if="name" data-ix="'+ix+'" value="'+esc(i.name)+'" placeholder="名稱">'
       +'<input data-if="tgt" data-ix="'+ix+'" type="number" value="'+Math.round((i.tgt||0)*100)+'" placeholder="%">'
       +'<select data-if="pocket" data-ix="'+ix+'"><option value="core"'+(i.pocket==="core"?" selected":"")+'>核心</option><option value="sat"'+(i.pocket!=="core"?" selected":"")+'>衛星</option></select>'
-      +'<button class="sec" data-del="'+ix+'" style="height:40px;padding:0;font-size:12px">刪除</button></div>';
+      +'<button class="sec" data-del="'+ix+'">刪除</button></div>';
   });
   $("instBox").innerHTML=ib;
   $("instBox").querySelectorAll("[data-if]").forEach(function(e){e.addEventListener("change",function(ev){
@@ -550,7 +607,7 @@ function initUI(){
     const gone=INST[+e.dataset.del];
     if(!confirm("刪除標的 "+(gone.id||"(空白)")+"?"))return;
     /* 持股必須一起刪:畫面是用 S.units[id]||0 畫的,殘留值會在同一代碼加回來時復活 */
-    if(gone.id)delete S.units[gone.id];
+    if(gone.id){delete S.units[gone.id];delete S.cost[gone.id]}
     INST.splice(+e.dataset.del,1);save();initUI();
   }});
   renderLog();
@@ -591,7 +648,7 @@ async function fetchAll(){
   Q.px=px;
 }
 /* 以下皆為共用引擎的薄包裝:把本檔的可變狀態(S / Q)組成引擎要的 ctx */
-function engCtx(){return{inst:INST,units:S.units,prem:S.prem,prices:Q.px,fx:Q.fx,
+function engCtx(){return{inst:INST,units:S.units,cost:S.cost,prem:S.prem,prices:Q.px,fx:Q.fx,
   cashTWD:S.cashTWD,cashUSD:S.cashUSD}}
 function pxTWD(i){return EG.priceTWD(i,Q.px,Q.fx)}
 function valTWD(i){return EG.valueTWD(i,S.units,Q.px,Q.fx)}
@@ -599,6 +656,9 @@ function totals(){return EG.totals(engCtx())}
 function tierTarget(dd,prev){return EG.tierTarget(dd,prev)}
 function sigBad(s){return EG.validateSignal(s)}
 function render(mutate){
+  /* 加碼分配是對「當下持倉」算的,持倉或報價一變就作廢。留在畫面上
+     會被當成還有效的建議,所以每次重繪都清掉,由按鈕重新寫入。 */
+  $("addOut").innerHTML="";
   const s=Q.sig||{},t=totals(),V=t.V,cash=t.cash;
   const spx=s.spx||{},vix=s.vix||{};
   const spxL=+spx.last,spxM=+spx.sma12m,vixL=+vix.last;
@@ -647,13 +707,25 @@ function render(mutate){
     const tg=EG.targetWeight(i,tc,INST);
     const off=(w!=null)&&EG.offBand(w,tg);
     const prem=S.prem[i.id];
+    const pl=EG.pnlOf(i,S.units,S.cost,Q.px,Q.fx);
     const scale=0.40;
-    cards+='<div class="hcard"><div class="hrow"><div class="hname">'+esc(i.id)+'<span class="nm">'+esc(i.name)+'</span><span class="chip'+(i.pocket==="sat"?" sat":"")+'">'+(i.pocket==="sat"?"衛星":"核心")+'</span></div><div class="hval">'+(v==null?"—":fmt(v))+'</div></div>'
+    cards+='<div class="hcard"><div class="hrow"><div class="hname">'+esc(i.id)+'<span class="nm">'+esc(i.name)+'</span><span class="chip">'+(i.pocket==="sat"?"衛星":"核心")+'</span></div><div class="hval">'+(v==null?"—":fmt(v))+'</div></div>'
       +'<div class="hsub"><span>'+fmt(S.units[i.id]||0)+' 股 @ '+(fin(p)?fmt(p,2):"—")+'</span><span class="'+(off?"wn":"")+'">'+(w==null?"—":(w*100).toFixed(1))+'% / '+(tg*100).toFixed(1)+'%</span></div>'
       +'<div class="wtrack"><div class="wfill'+(off?" off":"")+'" style="width:'+(w==null?0:Math.min(w/scale*100,100))+'%"></div><div class="wtick" style="left:'+Math.min(tg/scale*100,100)+'%"></div></div>'
+      +'<div class="hcost"><span>'+(pl.cost==null?"成本 —":"成本 "+fmt(pl.cost)+" · 均價 "+fmt(pl.cost/(S.units[i.id]||1),2))+'</span>'
+      +'<span class="'+(pl.pnl==null?"":(pl.pnl>=0?"pos":"neg"))+'">'
+      +(pl.pnl==null?"損益 —":(pl.pnl>=0?"+":"")+fmt(pl.pnl)
+        +(pl.pct==null?"":" ("+(pl.pnl>=0?"+":"")+(pl.pct*100).toFixed(2)+"%)"))+'</span></div>'
       +'<div class="hfoot"><span>溢價% <input data-p="'+esc(i.id)+'" value="'+esc(prem==null?"":prem)+'" placeholder="—"></span><span>'+(off?"超出容忍帶":"容忍帶內")+'</span></div></div>';
   }
   $("holdCards").innerHTML=cards;
+  /* 成本未知的標的不計入總損益,並在句子裡說出來——不要悄悄少算 */
+  const tot=EG.pnlTotal(engCtx());
+  $("holdPnl").textContent=(tot.cost>0
+    ? "總成本 "+fmt(tot.cost)+" · 未實現損益 "+(tot.pnl>=0?"+":"")+fmt(tot.pnl)
+      +" ("+(tot.pnl>=0?"+":"")+(tot.pct*100).toFixed(2)+"%)"
+      +(tot.missing?" · "+tot.missing+" 檔成本未知,未計入":"")
+    : "成本未知——到設定頁貼上券商庫存就能算損益");
   document.querySelectorAll("[data-p]").forEach(function(e){e.onchange=function(){S.prem[e.dataset.p]=+e.value;save()}});
   const cV=fin(V)?V:1;
   $("aCore").style.width=(coreV/cV*100)+"%";$("aSat").style.width=(satV/cV*100)+"%";$("aCash").style.width=(cash/cV*100)+"%";
@@ -705,7 +777,10 @@ async function applyPlan(plan,tag,keepHtml){
     toast("美元現金的台幣值超過計畫現金,請先至設定頁校正現金——本次未套用");
     log("一鍵套用中止("+tag+"):台幣現金會變負數,未寫入持倉");return;
   }
+  /* 成本必須跟著計畫走(平均成本法),否則下個月的損益是錯的 */
+  const nc=EG.costAfter(S.cost,S.units,plan,engCtx());
   for(const k in plan.units)S.units[k]=plan.units[k];
+  for(const k in nc){if(nc[k]==null)delete S.cost[k];else S.cost[k]=nc[k]}
   S.cashTWD=c;
   save();initUI();toast("持倉已自動套用");log("一鍵套用:"+tag);
   await runCheck();
@@ -719,7 +794,7 @@ async function runCheck(){
     await fetchAll();
     /* 閘門是規格的一部分(任一觸發即中止且不推進狀態),所以住在引擎裡有測試守著。
        本檔只負責跳脫與排版——標的代碼可由匯入檔控制,整句都要跳脫。 */
-    const today=new Date(Date.now()+8*3600e3).toISOString().slice(0,10);
+    const today=todayTPE();
     const blockers=EG.gateReasons(engCtx(),Q.sig,today);
     if(blockers.length){
       render(false);
@@ -777,7 +852,7 @@ $("btnAuto").onclick=async function(){
       plan0.units[i.id]=sh;spend+=sh*pt;
       if(du){same=false;
         orders+="<div class='sug"+(du<0?" sell":"")+"'>"+esc(i.id)+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))
-          +" 股(約 "+fmt(Math.abs(du)*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")<br><span style='color:var(--mut);font-size:12px'>目前 "+fmt(cur)+" → 目標 "+fmt(sh)+" 股</span></div>";}
+          +" 股(約 "+fmt(Math.abs(du)*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")<br><span style='color:var(--muted);font-size:12px'>目前 "+fmt(cur)+" → 目標 "+fmt(sh)+" 股</span></div>";}
     }
     let html="<div class='sug hold'>目標配置已套用(總資產 "+fmt(capTWD)+" TWD)。以下是<b>與目前持倉的差額</b>,請至券商執行;實際成交不同時至設定頁校正:</div>"
       +(same?"<div class='sug hold'>目前持倉已符合目標,無需交易。</div>":orders);
@@ -787,6 +862,38 @@ $("btnAuto").onclick=async function(){
     await applyPlan(plan0,"自動分配",html);
   }catch(e){toast("失敗:"+e)}
   $("btnAuto").disabled=false;
+};
+$("btnAdd").onclick=async function(){
+  readUI();
+  const add=+$("addCash").value||0;
+  if(add>0){
+    /* 沒有報價時每一檔的缺口都算不出來,allocateCash 只能回「每一檔都已達到
+       或超過目標權重」——把「抓不到價」講成「不用買」,而新裝置正是最常遇到
+       的情況。沒有訊號時 st.risk 是 undefined,風險閘門等於不存在。 */
+    if(!Q.sig||LIVE().some(function(i){return !fin(Q.px[i.id])})){
+      $("btnAdd").disabled=true;$("btnAdd").textContent="抓價中…";
+      try{await fetchAll()}catch(e){ }
+      $("btnAdd").disabled=false;$("btnAdd").textContent="算這筆錢該怎麼分";
+    }
+    const today=todayTPE();
+    const blockers=EG.gateReasons(engCtx(),Q.sig,today);
+    if(blockers.length){
+      $("addOut").innerHTML=blockers.map(function(b){return "<div class='sug block'>"+esc(b)+"</div>"}).join("")
+        +"<div class='sug hold'>閘門沒過就不算加碼分配——算出來的分配會建立在不完整的資料上。</div>";
+      log("加碼試算中止:"+blockers.join(" / "));return;
+    }
+  }
+  const st=render(false);
+  const r=EG.allocateCash(engCtx(),add,st);
+  if(r.kind!=="add"){$("addOut").innerHTML="<div class='sug hold'>"+esc(r.message)+"</div>";return}
+  /* 只買不賣:這是「新的一筆錢放哪裡」,不是「現在的組合要不要重配」 */
+  $("addOut").innerHTML="<div class='sug hold'>加碼 "+fmt(add)+" TWD,買進最缺的幾檔,"
+    +"加碼後總值 "+fmt(r.V2)+" TWD、現金目標 "+(r.targetCash*100)+"%:</div>"
+    +r.orders.map(function(o){return "<div class='sug'>"+esc(o.id)+" 買入 "+fmt(o.shares)
+      +" 股(約 "+fmt(o.amount)+" TWD,佔缺口 "+(o.share*100).toFixed(0)+"%)</div>"}).join("")
+    +"<div class='sug hold'>合計投入 "+fmt(r.spend)+" TWD,剩 "+fmt(r.left)
+    +" TWD 留在現金(整股化與現金水位的餘數)。實際下單後至設定頁貼上券商庫存更新持股。</div>";
+  log("加碼試算:"+fmt(add)+" TWD → "+r.orders.length+" 筆");
 };
 $("btnMC").onclick=async function(){
   /* 兩種前置條件分開判斷:沒填投入金額不該回報成匯率問題 */
@@ -805,6 +912,46 @@ $("btnMC").onclick=async function(){
   $("mcOut").innerHTML="4 年後("+fmt(paths)+" 路徑,取樣 1990–2026 定案引擎):<br>P5 "+fmt(capTWD*q(.05))+" · 中位 "+fmt(capTWD*q(.5))+" · P95 "+fmt(capTWD*q(.95))+" TWD<br>虧損機率 "+(res.filter(function(x){return x<1}).length/paths*100).toFixed(1)+"%";
   log("MC:capTWD="+fmt(capTWD));
 };
+let PARSED=null;
+$("btnParse").onclick=async function(){
+  /* 解析的安全機制是「股數 × 現價 ≈ 市值」。沒有報價就核對不了,每一列都會變成
+     「需確認」——而新裝置還原資料正是最需要它的時候,所以先把價抓回來。 */
+  if(LIVE().some(function(i){return !fin(Q.px[i.id])})){
+    $("btnParse").disabled=true;$("btnParse").textContent="抓價中…";
+    try{await fetchAll()}catch(e){toast("抓不到報價,解析結果需要逐欄人工核對")}
+    $("btnParse").disabled=false;$("btnParse").textContent="解析";
+  }
+  const r=EG.parseBrokerPaste($("pasteBox").value,INST,Q.px,Q.fx);
+  PARSED=r.rows.filter(function(x){return x.units!=null});
+  if(!PARSED.length){
+    $("pasteOut").innerHTML="<div class='sug block'>這段文字裡找不到任何已設定的標的代碼。"
+      +"請確認複製到的是庫存清單,並且設定頁已經有這些代碼。</div>";return;
+  }
+  const unsure=PARSED.filter(function(x){return !x.sure}).length;
+  $("pasteOut").innerHTML="<table class='prev'><thead><tr><th>代碼</th><th>目前股數</th>"
+    +"<th>解析股數</th><th>解析成本</th></tr></thead><tbody>"
+    +PARSED.map(function(x){return "<tr class='"+(x.sure?"":"unsure")+"'><td>"+esc(x.id)
+      +(x.sure?"":" 需確認")+"</td><td>"+fmt(S.units[x.id]||0)+"</td><td>"+fmt(x.units)
+      +"</td><td>"+(x.cost==null?"—":fmt(x.cost))+"</td></tr>"}).join("")
+    +"</tbody></table>"
+    +(unsure?"<div class='sug block'>有 "+unsure+" 檔無法用「股數 × 現價 ≈ 市值」對上,"
+      +"請逐欄核對再套用。</div>":"")
+    +(r.unknown.length?"<div class='sug hold'>貼上的資料裡有設定頁沒有的代碼:"
+      +esc(r.unknown.join("、"))+"。那些持股不會被配置台算進總值。</div>":"")
+    +"<div style='margin-top:14px'><button id='btnPasteApply'>確認無誤,套用</button></div>";
+  $("btnPasteApply").onclick=applyParsed;
+};
+async function applyParsed(){
+  if(!PARSED||!PARSED.length)return;
+  PARSED.forEach(function(x){
+    S.units[x.id]=Math.max(0,Math.floor(x.units));
+    if(x.cost!=null)S.cost[x.id]=Math.max(0,Math.round(x.cost));
+  });
+  save();initUI();$("pasteBox").value="";$("pasteOut").innerHTML="";PARSED=null;
+  toast("持股與成本已更新");
+  log("由券商庫存更新持股與成本");
+  await runCheck();
+}
 $("btnExport").onclick=function(){
   const a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:"application/json"}));
@@ -835,7 +982,12 @@ $("btnResetPeak").onclick=function(){
 };
 function renderLog(){$("logBox").innerHTML=S.log.slice(0,40).map(function(l){return "<div class='log'>"+esc(l)+"</div>"}).join("")||"<div class='log'>尚無紀錄</div>"}
 initUI();
-document.addEventListener("change",function(e){if(e.target.matches("input,select")&&!e.target.dataset.p&&e.target.id!=="impFile")readUI()});
+document.addEventListener("change",function(e){
+  if(!e.target.matches("input,select")||e.target.dataset.p||e.target.id==="impFile")return;
+  readUI();
+  /* 改完持有數就要重畫:原本只存檔不重繪,切到持倉頁還是上一次的數字 */
+  render(false);
+});
 (async function(){
   try{
     /* 與 fetchAll 一致:/fx 回應缺 last 欄位時降為 null,不要整段開機失敗 */

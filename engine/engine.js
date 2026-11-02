@@ -131,6 +131,64 @@
     return { inv: inv, cash: cash, V: inv + cash, miss: miss };
   }
 
+  /* ── 成本與損益 ───────────────────────────────────────────────
+     cost 是「這一檔的總成本(台幣)」,與券商畫面的「平均成本」帳務模式一致。
+     null 代表「不知道成本」——不知道就說不知道,不要用現價倒推一個假的。
+  ─────────────────────────────────────────────────────────────── */
+
+  /**
+   * 單一標的的未實現損益。
+   * @returns {cost, value, pnl, pct} 任何一項算不出來即為 null
+   */
+  function pnlOf(i, units, cost, prices, fx) {
+    var v = valueTWD(i, units, prices, fx);
+    var c = (cost && cost[i.id] != null) ? +cost[i.id] : null;
+    if (v == null || c == null || !Number.isFinite(c)) {
+      return { cost: Number.isFinite(c) ? c : null, value: v, pnl: null, pct: null };
+    }
+    return { cost: c, value: v, pnl: v - c, pct: c > 0 ? v / c - 1 : null };
+  }
+
+  /** 整個組合的成本與未實現損益。只計入成本已知且報價取得到的標的 */
+  function pnlTotal(ctx) {
+    var cost = 0, value = 0, missing = 0;
+    live(ctx.inst).forEach(function (i) {
+      var r = pnlOf(i, ctx.units, ctx.cost, ctx.prices, ctx.fx);
+      if (r.pnl == null) { if ((ctx.units && ctx.units[i.id]) > 0) missing++; return; }
+      cost += r.cost; value += r.value;
+    });
+    return {
+      cost: cost, value: value, pnl: value - cost,
+      pct: cost > 0 ? value / cost - 1 : null,
+      missing: missing
+    };
+  }
+
+  /**
+   * 計畫執行後的成本(平均成本法)。
+   *
+   * 買進把成交金額加進成本;賣出按比例扣成本,剩下的股數平均成本不變。
+   * 本來就不知道成本的標的仍然回傳 null——執行一次買賣不會讓它變成已知。
+   * 不維護這份成本的話,下個月的損益就是錯的,比不顯示損益更糟。
+   */
+  function costAfter(cost0, units0, plan, ctx) {
+    var out = {}, c0 = cost0 || {}, u0 = units0 || {};
+    var byId = {};
+    live(ctx.inst).forEach(function (i) { byId[i.id] = i; });
+    Object.keys(plan.units || {}).forEach(function (id) {
+      var before = u0[id] || 0, after = plan.units[id];
+      var c = (c0[id] == null || !Number.isFinite(+c0[id])) ? null : +c0[id];
+      if (c === null && !(before === 0 && after > 0)) { out[id] = null; return; }
+      /* 從 0 股買進時成本就是這次的成交金額——這一檔的成本從此已知 */
+      if (c === null) c = 0;
+      if (after === before) { out[id] = c; return; }
+      if (after < before) { out[id] = before > 0 ? c * (after / before) : 0; return; }
+      var pt = byId[id] ? priceTWD(byId[id], ctx.prices, ctx.fx) : null;
+      out[id] = pt == null ? null : c + (after - before) * pt;
+    });
+    return out;
+  }
+
   /* ── 分層抄底階梯 ─────────────────────────────────────────────── */
 
   /**
@@ -221,6 +279,16 @@
       for (var k in o.units) {
         if (!Number.isInteger(o.units[k]) || o.units[k] < 0) {
           return "持股必須是非負整數:" + k + " = " + o.units[k];
+        }
+      }
+    }
+    if (o.cost != null) {
+      if (typeof o.cost !== "object" || Array.isArray(o.cost)) return "cost 必須是物件";
+      for (var ck in o.cost) {
+        var cv = o.cost[ck];
+        /* null 是合法的:代表「這一檔的成本不知道」,與 0 不同 */
+        if (cv !== null && !(Number.isFinite(cv) && cv >= 0)) {
+          return "成本必須是非負數或 null:" + ck + " = " + cv;
         }
       }
     }
@@ -417,6 +485,71 @@
     };
   }
 
+  /**
+   * 加碼分配:一筆新資金該怎麼分。只買不賣。
+   *
+   * 和 makePlan 是兩個不同的問題:makePlan 問「現在的組合要不要重配」,
+   * 會產生賣單;這裡問「新的一筆錢放哪裡」,答案一定是買進最缺的那幾檔。
+   * 所以它用的是加碼後的總值當分母,讓每一檔都往目標權重靠,
+   * 而不是把已經超重的部分賣掉。
+   *
+   * 風險期不配:規格是凍結投入,新錢也是投入。
+   *
+   * @param add 這次要加碼的台幣金額
+   * @param st  computeState 的輸出(要 V、cash、tc、risk)
+   * @returns {kind:"hold", message} | {kind:"add", orders, spend, left, targetCash, V2}
+   */
+  function allocateCash(ctx, add, st, P) {
+    P = P || PARAMS;
+    var list = live(ctx.inst);
+    if (!(add > 0)) return { kind: "hold", message: "請先填入要加碼的金額" };
+    if (!list.length) return { kind: "hold", message: "尚未設定任何標的" };
+    if (!(weightSum(ctx.inst) > 0)) {
+      return { kind: "hold", message: "各標的的目標權重合計為 0——請先至設定頁填入目標權重" };
+    }
+    if (st.risk) {
+      return { kind: "hold", message: "風險期凍結投入——這筆錢先留在現金,等風險旗標熄滅再分配" };
+    }
+    var V2 = st.V + add, tc = st.tc;
+    /* 加碼後現金仍低於目標水位時,這筆錢的用途是把現金補回水位,不是買股 */
+    var deploy = Math.min(add, (st.cash + add) - tc * V2);
+    if (!(deploy > 0)) {
+      return {
+        kind: "hold",
+        message: "加碼後現金佔比仍低於目標水位 " + (tc * 100) + "%——這筆先留在現金,不買進"
+      };
+    }
+    /* 各標的離加碼後目標值還差多少。只看不足的,超重的留給月檢去處理 */
+    var gaps = [], total = 0;
+    list.forEach(function (i) {
+      var pt = priceTWD(i, ctx.prices, ctx.fx);
+      if (pt == null) return;
+      var now = ((ctx.units && ctx.units[i.id]) || 0) * pt;
+      var want = targetWeight(i, tc, ctx.inst) * V2;
+      var gap = want - now;
+      if (gap > 0) { gaps.push({ i: i, pt: pt, gap: gap, now: now, want: want }); total += gap; }
+    });
+    if (!total) {
+      return { kind: "hold", message: "每一檔都已達到或超過加碼後的目標權重——這筆先留在現金" };
+    }
+    var orders = [], spend = 0;
+    gaps.forEach(function (g) {
+      var money = deploy * (g.gap / total);
+      var sh = Math.floor(money / g.pt);
+      /* 與再平衡同一條門檻:買不到有意義的量就不下這一筆 */
+      if (sh < 1 || sh * g.pt < V2 * P.MIN_TRADE_FRACTION) return;
+      orders.push({
+        id: g.i.id, side: "buy", shares: sh, amount: sh * g.pt,
+        gap: g.gap, share: g.gap / total
+      });
+      spend += sh * g.pt;
+    });
+    if (!orders.length) {
+      return { kind: "hold", message: "這筆金額分到每一檔都低於最小交易門檻——先累積再進場" };
+    }
+    return { kind: "add", orders: orders, spend: spend, left: add - spend, targetCash: tc, V2: V2 };
+  }
+
   /* ── 不變量 ───────────────────────────────────────────────────
      任何計畫都必須滿足這些條件。違反代表引擎有 bug,呼叫端應中止。
   ─────────────────────────────────────────────────────────────── */
@@ -520,6 +653,79 @@
     return bad;
   }
 
+  /**
+   * 解析券商庫存畫面貼上的文字。
+   *
+   * 不假設任何一家券商的欄位順序。每個已設定的代碼各占一段文字,
+   * 段內用「股數 × 現在的報價 ≈ 市值」這個關係把股數認出來——
+   * 那是唯一不靠版面就能確認的事實。對不上就 sure:false,
+   * 呼叫端必須讓人確認後才寫入,絕不可直接套用。
+   *
+   * 成本由市值與損益率相除得到(市值 / (1 + 損益率)),
+   * 不用「市值 − 損益」,因為損益那一欄與下一列的股數容易混淆。
+   *
+   * @returns {rows:[{id, units, value, cost, pnlPct, sure}], unknown:[代碼]}
+   */
+  function parseBrokerPaste(text, inst, prices, fx) {
+    var src = String(text || "");
+    var marks = [];
+    live(inst).forEach(function (i) {
+      /* 代碼必須是完整的一個 token:指名 0050 不可以命中 00500,
+         指名 A 也不可以命中「標的A」裡的那個 A */
+      var id = String(i.id);
+      if (!/^[0-9A-Za-z]+$/.test(id)) return;   // 代碼不是英數就不拿來比對
+      var m = new RegExp("(^|[^0-9A-Za-z])" + id + "(?![0-9A-Za-z])").exec(src);
+      if (m) marks.push({ i: i, at: m.index + m[1].length });
+    });
+    marks.sort(function (a, b) { return a.at - b.at; });
+
+    function nums(t) {
+      return (t.match(/-?\d[\d,]*(?:\.\d+)?/g) || [])
+        .map(function (x) { return +x.replace(/,/g, ""); })
+        .filter(function (n) { return Number.isFinite(n); });
+    }
+
+    var rows = marks.map(function (m, k) {
+      var id = m.i.id;
+      var end = (k + 1 < marks.length) ? marks[k + 1].at : src.length;
+      var start = k ? marks[k - 1].at + marks[k - 1].i.id.length : 0;
+      var after = src.slice(m.at + id.length, end);
+      var before = src.slice(start, m.at);
+
+      var value = nums(after)[0];
+      var pm = after.match(/(-?\d+(?:\.\d+)?)\s*%/);
+      var pnlPct = pm ? +pm[1] / 100 : null;
+      var pt = priceTWD(m.i, prices, fx);
+
+      var units = null, sure = false;
+      var cands = nums(before).filter(function (n) { return Number.isInteger(n) && n > 0; });
+      if (isPos(pt) && isPos(value)) {
+        var guess = value / pt, best = null;
+        cands.forEach(function (n) {
+          var err = Math.abs(n - guess) / guess;
+          if (err <= 0.05 && (best === null || err < best.err)) best = { n: n, err: err };
+        });
+        if (best) { units = best.n; sure = true; }
+      }
+      if (units === null && cands.length) units = cands[cands.length - 1];
+
+      var cost = (isPos(value) && pnlPct != null && pnlPct > -1) ? value / (1 + pnlPct) : null;
+      return {
+        id: id, units: units, value: isPos(value) ? value : null,
+        cost: cost == null ? null : Math.round(cost), pnlPct: pnlPct, sure: sure
+      };
+    });
+
+    /* 貼上的資料裡有、但設定頁沒有的代碼:那是漏記的持股,要講出來 */
+    var known = {};
+    live(inst).forEach(function (i) { known[i.id] = true; });
+    var unknown = [];
+    (src.match(/\b\d{4,5}[A-Z]?\b/g) || []).forEach(function (c) {
+      if (!known[c] && unknown.indexOf(c) < 0) unknown.push(c);
+    });
+    return { rows: rows, unknown: unknown };
+  }
+
   /** 目標權重合計是否為 1(現金 + 各標的) */
   function weightsSumToOne(inst, tc) {
     var s = tc;
@@ -533,6 +739,8 @@
     weightSum: weightSum, targetWeight: targetWeight, weightsSumToOne: weightsSumToOne,
     offBand: offBand,
     priceTWD: priceTWD, valueTWD: valueTWD, totals: totals,
+    pnlOf: pnlOf, pnlTotal: pnlTotal, costAfter: costAfter,
+    allocateCash: allocateCash, parseBrokerPaste: parseBrokerPaste,
     tierTarget: tierTarget, advanceTier: advanceTier, computeState: computeState,
     validateSignal: validateSignal, derivedRisk: derivedRisk, riskAgrees: riskAgrees,
     validateImport: validateImport, staleDays: staleDays,

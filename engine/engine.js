@@ -773,12 +773,28 @@
       };
     });
 
-    /* 貼上的資料裡有、但設定頁沒有的代碼:那是漏記的持股,要講出來 */
+    /* 貼上的資料裡有、但設定頁沒有的代碼:那是漏記的持股,要講出來。
+       講不出來的後果不只是少一列:總值、各檔權重、再平衡訂單全都建立在
+       不完整的組合上,而畫面上沒有任何線索。
+
+       用形狀認代碼有個陷阱:4–5 位的純數字在這段文字裡絕大多數是股數或
+       市值,不是代碼。原本的 /\b\d{4,5}[A-Z]?\b/ 會把「2000」(股數)、
+       「67500」(市值)、「3258」(損益)都報成代碼——逗號被 OCR 吃掉時
+       必然發生——同時又完全漏掉六位數的 006208(富邦台50)。
+       假警報比漏報更糟:它會讓人學會忽略這條訊息,等於沒有這條訊息。
+
+       台股 ETF 代碼一律 0 開頭(0050、00897、00631L、006208、00988A),
+       而券商不會把數量印成 067,500。所以判準改成「0 開頭的 4–6 位數字,
+       可帶一個字尾字母」。代價是 2330 那種個股代碼認不出來——它和 4 位數
+       的數量在形狀上無從分辨,寧可漏講也不要亂報。 */
     var known = {};
-    live(inst).forEach(function (i) { known[i.id] = true; });
-    var unknown = [];
-    (src.match(/\b\d{4,5}[A-Z]?\b/g) || []).forEach(function (c) {
-      if (!known[c] && unknown.indexOf(c) < 0) unknown.push(c);
+    live(inst).forEach(function (i) { known[String(i.id).toUpperCase()] = true; });
+    var unknown = [], seen = {};
+    (src.match(/\b0\d{3,5}[A-Za-z]?\b/g) || []).forEach(function (c) {
+      var u = c.toUpperCase();
+      if (known[u] || seen[u]) return;
+      seen[u] = true;
+      unknown.push(c);
     });
     return { rows: rows, unknown: unknown };
   }

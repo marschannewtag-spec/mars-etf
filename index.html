@@ -947,8 +947,11 @@ $("btnParse").onclick=async function(){
     +"</tbody></table>"
     +(unsure?"<div class='sug block'>有 "+unsure+" 檔無法用「股數 × 現價 ≈ 市值」對上,"
       +"請逐欄核對再套用。</div>":"")
-    +(r.unknown.length?"<div class='sug hold'>貼上的資料裡有設定頁沒有的代碼:"
-      +esc(r.unknown.join("、"))+"。那些持股不會被配置台算進總值。</div>":"")
+    /* 後果不只是「少算一檔」:總值、各檔權重、再平衡訂單全都建立在不完整的
+       組合上。原本只說「不會算進總值」,語氣太輕,也沒告訴人下一步做什麼。 */
+    +(r.unknown.length?"<div class='sug block'>貼上的資料裡有設定頁沒有的代碼:"
+      +esc(r.unknown.join("、"))+"。這幾檔不會算進總值,各檔權重與再平衡訂單都會跟著偏。"
+      +"要納入就到上面的「標的配置」新增代碼並給它目標權重;不納入就忽略這句。</div>":"")
     +"<div style='margin-top:14px'><button id='btnPasteApply'>確認無誤,套用</button></div>";
   $("btnPasteApply").onclick=applyParsed;
 };

@@ -43,7 +43,7 @@ node engine/dump-params.js    # 參數改動後重新產生 engine.json
 
 `.github/workflows/ci.yml` 在每次 push(心跳除外)與 PR 執行四道關卡:
 
-1. 引擎測試(160 項離線)
+1. 引擎測試(196 項離線)
 2. `engine.json` 與 `engine.js` 的 PARAMS 同步檢查
 3. `index.html` 內嵌 script 語法檢查
 4. 確認 index.html 仍引用共用引擎、`.nojekyll` 仍在

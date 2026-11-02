@@ -735,7 +735,7 @@
 
   return {
     PARAMS: PARAMS,
-    isPos: isPos, numOk: numOk, hasId: hasId, live: live,
+    isPos: isPos, hasId: hasId, live: live,
     weightSum: weightSum, targetWeight: targetWeight, weightsSumToOne: weightsSumToOne,
     offBand: offBand,
     priceTWD: priceTWD, valueTWD: valueTWD, totals: totals,

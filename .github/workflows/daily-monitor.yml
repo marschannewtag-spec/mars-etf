@@ -10,8 +10,10 @@ name: 每日監控
 
 on:
   schedule:
-    # 08:00 UTC = 台北 16:00,台股收盤後。台灣無日光節約時間。
-    - cron: "0 8 * * 1-5"
+    # 08:17 UTC = 台北 16:17,台股收盤後。台灣無日光節約時間。
+    # 刻意不用整點:實測 61 次排程中位延遲 4 小時 56 分、最長 11 小時 39 分,
+    # 整點是公開 repo 排程最壅塞的槽位。改成奇數分鐘後需觀察一兩週確認有改善。
+    - cron: "17 8 * * 1-5"
   workflow_dispatch:        # 可手動觸發
     inputs:
       drill:
@@ -94,6 +96,30 @@ jobs:
         id: result
         run: |
           echo "alerts=$(jq '.alerts | length' monitor/result.json)" >> "$GITHUB_OUTPUT"
+          echo "closes=$(jq '.closes | length' monitor/result.json)" >> "$GITHUB_OUTPUT"
+
+      - name: 條件解除 → 關閉對應 Issue
+        if: steps.result.outputs.closes != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # 條件解除時不開新 Issue,而是留言在原本那則觸發 Issue 上並關閉它。
+          # 原本開第二則,於是列表永遠留著一對開著的 Issue,新警報藏在裡面。
+          # 找不到(你已手動關閉)就什麼都不做——你沒看到的觸發,解除不是新聞。
+          COUNT=$(jq '.closes | length' monitor/result.json)
+          for k in $(seq 0 $((COUNT - 1))); do
+            TITLE=$(jq -r ".closes[$k].title" monitor/result.json)
+            jq -r ".closes[$k].detail" monitor/result.json > /tmp/close.md
+            N=$(gh issue list --state open --limit 100 --json number,title | jq -r --arg t "$TITLE" '[.[] | select(.title | endswith($t))][0].number // empty')
+            if [ -n "$N" ]; then
+              gh issue comment "$N" --body-file /tmp/close.md
+              gh issue close "$N" --reason completed
+              echo "已關閉 Issue #$N($TITLE)"
+            else
+              echo "找不到未關閉的「$TITLE」,略過"
+            fi
+          done
 
       - name: 發出通知
         if: steps.result.outputs.alerts != '0'
@@ -153,4 +179,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add monitor/heartbeat.json
           git commit -m "chore(monitor): 更新心跳 $(jq -r '.checkedAt' monitor/heartbeat.json)"
+          # 你在 checkout 之後 push 任何東西,這裡的 push 就會被拒、整個 job 紅掉,
+          # 而紅掉不會變成通知(通知步驟在前面),當天的監控就靜靜失敗了。
+          git pull --rebase -q origin main
           git push

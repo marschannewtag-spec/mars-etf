@@ -616,9 +616,30 @@ describe("防線 · 加碼分配", () => {
     a.match(r.message, /最小交易門檻/);
   });
 
-  it("持倉頁確實接上了", (a) => {
+  it("沒有報價時,引擎分不出「已達標」與「抓不到價」", (a) => {
+    /* 這就是呼叫端必須先過閘門的理由:缺口全算不出來,訊息會變成「不用買」 */
+    const noPx = Object.assign({}, ctx, { prices: {} });
+    const st = E.computeState(noPx, { peak: 0, tierTc: P.BASE, signal: okSignal() });
+    const r = E.allocateCash(noPx, 100000, st);
+    a.strictEqual(r.kind, "hold");
+    a.match(r.message, /已達到或超過/, "得到:" + r.message);
+  });
+
+  it("持倉頁確實接上了,而且先過閘門才分配", (a) => {
     const html = readHtml();
     a.match(html, /EG\.allocateCash\(engCtx\(\),add,st\)/, "寫好沒接上,測試照樣全綠");
+    const add = html.slice(html.indexOf('$("btnAdd").onclick'), html.indexOf('$("btnMC").onclick'));
+    a.match(add, /await fetchAll\(\)/, "報價缺失時要先補抓,否則核對不了");
+    a.match(add, /EG\.gateReasons\(engCtx\(\),Q\.sig,today\)/, "加碼前必須跑閘門");
+    a.ok(add.indexOf("EG.gateReasons") < add.indexOf("EG.allocateCash"),
+      "閘門要在分配之前——訊號無效時 st.risk 是 undefined,風險閘門等於不存在");
+  });
+
+  it("加碼結果會過期:每次重繪都要清掉", (a) => {
+    /* 持倉一變,上一次算出來的分配就是錯的,留在畫面上會被當成還有效 */
+    const html = readHtml();
+    const r = html.slice(html.indexOf("function render(mutate)"), html.indexOf("const s=Q.sig||{}"));
+    a.match(r, /\$\("addOut"\)\.innerHTML=""/, "render 開頭必須清掉上一次的加碼建議");
   });
 });
 
@@ -716,6 +737,13 @@ describe("防線 · 成本是狀態的一部分", () => {
     a.strictEqual(E.validateImport({ cost: { A: null } }), null, "null 代表成本未知,是合法的");
     a.match(E.validateImport({ cost: { A: -1 } }), /成本/);
     a.match(E.validateImport({ cost: [] }), /cost/);
+  });
+
+  it("改完持有數必須重畫,否則持倉頁停在舊數字", (a) => {
+    const html = readHtml();
+    const h = html.slice(html.indexOf('document.addEventListener("change"'));
+    a.match(h.slice(0, 400), /readUI\(\);/, "仍要存檔");
+    a.match(h.slice(0, 400), /render\(false\);/, "也要重畫");
   });
 
   it("刪標的時成本一起刪", (a) => {

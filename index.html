@@ -192,11 +192,35 @@ label{font-size:var(--fs-small);color:var(--muted);display:block;margin:16px 0 8
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .log{font-size:13px;color:var(--muted);padding:9px 0;border-top:1px solid var(--rule);
   font-family:var(--mono);font-variant-numeric:tabular-nums}
-.note{font-size:13px;color:var(--muted);margin-top:14px;line-height:1.6}
+.note{font-size:13px;color:var(--muted);margin-top:14px;line-height:1.6;max-width:72ch}
 code{font-family:var(--mono);background:var(--raised);padding:1px 5px;border-radius:3px}
 .sec-row{display:grid;gap:var(--gap);grid-template-columns:320px 1fr;align-items:start}
 .sec-row>.lab{font-size:13px;color:var(--muted);line-height:1.6}
 .sec-row>.lab b{display:block;font-size:16px;font-weight:600;color:var(--text);margin-bottom:6px}
+/* 標的列:五個控制項擠一列,只有卡片夠寬時名稱欄才放得下。1240px 以下
+   (手機全部、以及側欄仍在的 901–1240px)名稱欄會被壓成 2–36px 的碎片,
+   名稱完全看不到也改不了——實測 390px 時溢出 211px。所以窄的時候拆兩行。 */
+.instrow{display:grid;gap:6px;margin-bottom:6px;
+  grid-template-columns:92px minmax(140px,1fr) 62px 76px 56px}
+.instrow button{height:40px;padding:0;font-size:12px}
+@media(max-width:1240px){
+  .instrow{grid-template-columns:1fr 76px 72px;
+    grid-template-areas:"code code pct" "name pocket del"}
+  .instrow>:nth-child(1){grid-area:code}
+  .instrow>:nth-child(2){grid-area:name}
+  .instrow>:nth-child(3){grid-area:pct}
+  .instrow>:nth-child(4){grid-area:pocket}
+  .instrow>:nth-child(5){grid-area:del}
+}
+/* 首列五格在 1240px 以下會讓 7 位數的組合總值撞進隔壁格(實測 1024px 溢出
+   32px),改成 3+2 兩列。901px 以下另有兩欄規則,所以這段要限定下界。 */
+@media(min-width:901px) and (max-width:1240px){
+  .strip.lead{grid-template-columns:repeat(3,1fr)}
+  .strip.lead>div:nth-child(4){border-left:0;padding-left:0}
+  .strip.lead>div:nth-child(n+4){border-top:1px solid var(--rule);padding-top:14px;margin-top:14px}
+  /* 同樣的寬度下,壓測的 1.4fr 欄只剩 430px,表格每一格都在折行 */
+  .cols{grid-template-columns:1fr}
+}
 
 /* ── 控制項:強調靠反白,不靠顏色 ─────────────────────────── */
 button{height:var(--control-h);padding:0 16px;border:1px solid transparent;
@@ -217,7 +241,7 @@ button.wide{width:100%}
 
 /* ── 手機:側欄收成底欄 ───────────────────────────────────── */
 @media(max-width:900px){
-  :root{--pad:16px;--gap:16px}
+  :root{--pad:16px;--gap:16px;--control-h:42px}
   .shell{grid-template-columns:1fr}
   nav{flex-direction:row;position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;
     gap:4px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));
@@ -238,16 +262,16 @@ button.wide{width:100%}
   .strip.snap{grid-template-columns:1fr}
   .strip.snap>div{border-left:0;padding-left:0;border-top:1px solid var(--rule)}
   .strip.snap>div:first-child{border-top:0}
-  .strip.quad{grid-template-columns:1fr}
-  .strip.quad>div{border-left:0;padding-left:0;border-top:1px solid var(--rule)}
-  .strip.quad>div:first-child{border-top:0}
   #toast{bottom:88px}
+}
+/* 360 / 375px 的手機:首列兩欄時每格只剩 126px,26px 的 7 位數會切掉右邊。
+   實測 22px + 12px 內縮可容納 10 個字元(八位數的總值);九位數仍會溢出。 */
+@media(max-width:389px){
+  .strip.lead b{font-size:22px}
+  .strip>div:nth-child(2),.strip>div:nth-child(4){padding-left:12px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 .strip.lead b{font-size:26px}
-.strip.quad{grid-template-columns:1fr 1fr}
-.strip.quad>div:nth-child(odd){border-left:0;padding-left:0}
-.strip.quad>div:nth-child(n+3){border-top:1px solid var(--rule)}
 .card>label:first-child{margin-top:0}
 
 </style></head>
@@ -328,30 +352,30 @@ button.wide{width:100%}
   </div></div>
 
   <div class="card" style="margin-bottom:var(--gap)">
-    <h2>加碼試算</h2>
-    <div class="grid2">
-      <div><label for="addCash">要加碼的金額(TWD)</label><input id="addCash" type="number" placeholder="100000"></div>
-      <div style="display:flex;align-items:flex-end"><button class="sec wide" id="btnAdd">算這筆錢該怎麼分</button></div>
-    </div>
-    <div id="addOut"></div>
-  </div>
-
-  <div class="card" style="margin-bottom:var(--gap)">
     <h2>配置總覽</h2>
-    <div class="alloc"><div id="aCore" style="background:var(--positive);width:0"></div><div id="aSat" style="background:var(--warning);width:0"></div><div id="aCash" style="background:var(--control);width:0"></div></div>
+    <div class="alloc"><div id="aCore" style="background:var(--positive);width:0"></div><div id="aSat" style="background:var(--muted);width:0"></div><div id="aCash" style="background:var(--control);width:0"></div></div>
     <div class="legend">
       <span><span class="dot" style="background:var(--positive)"></span>核心 <b id="lgCore">—</b></span>
-      <span><span class="dot" style="background:var(--warning)"></span>衛星 <b id="lgSat">—</b></span>
+      <span><span class="dot" style="background:var(--muted)"></span>衛星 <b id="lgSat">—</b></span>
       <span><span class="dot" style="background:var(--control)"></span>現金 <b id="lgCash">—</b></span>
     </div>
   </div>
 
   <div class="holds" id="holdCards"></div>
 
-  <div class="card" id="cashCard">
+  <div class="card" id="cashCard" style="margin-bottom:var(--gap)">
     <div class="hrow"><div class="hname">現金 <span class="nm">定存 / 貨幣基金 · SGOV</span></div><div class="hval" id="cashVal">—</div></div>
     <div class="hsub"><span id="cashPct">— / 20%</span><span>白刻度 = 目標</span></div>
     <div class="wtrack"><div class="wfill" id="cashFill"></div><div class="wtick" id="cashTick"></div></div>
+  </div>
+
+  <div class="card">
+    <h2>加碼試算</h2>
+    <div class="grid2">
+      <div><label for="addCash">要加碼的金額(TWD)</label><input id="addCash" type="number" placeholder="100000"></div>
+      <div style="display:flex;align-items:flex-end"><button class="sec wide" id="btnAdd">算這筆錢該怎麼分</button></div>
+    </div>
+    <div id="addOut"></div>
   </div>
 </div>
 
@@ -472,7 +496,7 @@ button.wide{width:100%}
 
 </div></main>
 </div>
-<div id="toast"></div>
+<div id="toast" role="status"></div>
 <script src="engine/engine.js"></script>
 <script>
 "use strict";
@@ -528,6 +552,8 @@ const LIVE=function(){return EG.live(INST)};
 const INV=function(){return EG.weightSum(INST)};
 const $=function(id){return document.getElementById(id)};
 const fin=EG.isPos;
+/* 台北時間的今天:引擎用它比對 asof 判斷過期,用 UTC 會在台灣的凌晨差一天 */
+const todayTPE=function(){return new Date(Date.now()+8*3600e3).toISOString().slice(0,10)};
 const fmt=function(n,d){d=d||0;return Number.isFinite(n)?n.toLocaleString("zh-TW",{maximumFractionDigits:d,minimumFractionDigits:d}):"—"};
 /* 凡是標的名稱/代碼、changelog、Worker 回傳值進 innerHTML 都要過這一關:
    未跳脫時名稱含 " 會截斷輸入框並在下次存檔寫回損毀值,匯入他人 JSON 更等於執行任意 HTML */
@@ -557,12 +583,12 @@ function initUI(){
   renderUnits();
   var ib="";
   INST.forEach(function(i,ix){
-    ib+='<div style="display:grid;grid-template-columns:92px 1fr 62px 76px 56px;gap:6px;margin-bottom:6px">'
+    ib+='<div class="instrow">'
       +'<input data-if="id" data-ix="'+ix+'" value="'+esc(i.id)+'" placeholder="代碼">'
       +'<input data-if="name" data-ix="'+ix+'" value="'+esc(i.name)+'" placeholder="名稱">'
       +'<input data-if="tgt" data-ix="'+ix+'" type="number" value="'+Math.round((i.tgt||0)*100)+'" placeholder="%">'
       +'<select data-if="pocket" data-ix="'+ix+'"><option value="core"'+(i.pocket==="core"?" selected":"")+'>核心</option><option value="sat"'+(i.pocket!=="core"?" selected":"")+'>衛星</option></select>'
-      +'<button class="sec" data-del="'+ix+'" style="height:40px;padding:0;font-size:12px">刪除</button></div>';
+      +'<button class="sec" data-del="'+ix+'">刪除</button></div>';
   });
   $("instBox").innerHTML=ib;
   $("instBox").querySelectorAll("[data-if]").forEach(function(e){e.addEventListener("change",function(ev){
@@ -630,6 +656,9 @@ function totals(){return EG.totals(engCtx())}
 function tierTarget(dd,prev){return EG.tierTarget(dd,prev)}
 function sigBad(s){return EG.validateSignal(s)}
 function render(mutate){
+  /* 加碼分配是對「當下持倉」算的,持倉或報價一變就作廢。留在畫面上
+     會被當成還有效的建議,所以每次重繪都清掉,由按鈕重新寫入。 */
+  $("addOut").innerHTML="";
   const s=Q.sig||{},t=totals(),V=t.V,cash=t.cash;
   const spx=s.spx||{},vix=s.vix||{};
   const spxL=+spx.last,spxM=+spx.sma12m,vixL=+vix.last;
@@ -680,12 +709,13 @@ function render(mutate){
     const prem=S.prem[i.id];
     const pl=EG.pnlOf(i,S.units,S.cost,Q.px,Q.fx);
     const scale=0.40;
-    cards+='<div class="hcard"><div class="hrow"><div class="hname">'+esc(i.id)+'<span class="nm">'+esc(i.name)+'</span><span class="chip'+(i.pocket==="sat"?" sat":"")+'">'+(i.pocket==="sat"?"衛星":"核心")+'</span></div><div class="hval">'+(v==null?"—":fmt(v))+'</div></div>'
+    cards+='<div class="hcard"><div class="hrow"><div class="hname">'+esc(i.id)+'<span class="nm">'+esc(i.name)+'</span><span class="chip">'+(i.pocket==="sat"?"衛星":"核心")+'</span></div><div class="hval">'+(v==null?"—":fmt(v))+'</div></div>'
       +'<div class="hsub"><span>'+fmt(S.units[i.id]||0)+' 股 @ '+(fin(p)?fmt(p,2):"—")+'</span><span class="'+(off?"wn":"")+'">'+(w==null?"—":(w*100).toFixed(1))+'% / '+(tg*100).toFixed(1)+'%</span></div>'
       +'<div class="wtrack"><div class="wfill'+(off?" off":"")+'" style="width:'+(w==null?0:Math.min(w/scale*100,100))+'%"></div><div class="wtick" style="left:'+Math.min(tg/scale*100,100)+'%"></div></div>'
       +'<div class="hcost"><span>'+(pl.cost==null?"成本 —":"成本 "+fmt(pl.cost)+" · 均價 "+fmt(pl.cost/(S.units[i.id]||1),2))+'</span>'
       +'<span class="'+(pl.pnl==null?"":(pl.pnl>=0?"pos":"neg"))+'">'
-      +(pl.pnl==null?"損益 —":(pl.pnl>=0?"+":"")+fmt(pl.pnl)+" ("+(pl.pnl>=0?"+":"")+(pl.pct*100).toFixed(2)+"%)")+'</span></div>'
+      +(pl.pnl==null?"損益 —":(pl.pnl>=0?"+":"")+fmt(pl.pnl)
+        +(pl.pct==null?"":" ("+(pl.pnl>=0?"+":"")+(pl.pct*100).toFixed(2)+"%)"))+'</span></div>'
       +'<div class="hfoot"><span>溢價% <input data-p="'+esc(i.id)+'" value="'+esc(prem==null?"":prem)+'" placeholder="—"></span><span>'+(off?"超出容忍帶":"容忍帶內")+'</span></div></div>';
   }
   $("holdCards").innerHTML=cards;
@@ -764,7 +794,7 @@ async function runCheck(){
     await fetchAll();
     /* 閘門是規格的一部分(任一觸發即中止且不推進狀態),所以住在引擎裡有測試守著。
        本檔只負責跳脫與排版——標的代碼可由匯入檔控制,整句都要跳脫。 */
-    const today=new Date(Date.now()+8*3600e3).toISOString().slice(0,10);
+    const today=todayTPE();
     const blockers=EG.gateReasons(engCtx(),Q.sig,today);
     if(blockers.length){
       render(false);
@@ -822,7 +852,7 @@ $("btnAuto").onclick=async function(){
       plan0.units[i.id]=sh;spend+=sh*pt;
       if(du){same=false;
         orders+="<div class='sug"+(du<0?" sell":"")+"'>"+esc(i.id)+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))
-          +" 股(約 "+fmt(Math.abs(du)*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")<br><span style='color:var(--mut);font-size:12px'>目前 "+fmt(cur)+" → 目標 "+fmt(sh)+" 股</span></div>";}
+          +" 股(約 "+fmt(Math.abs(du)*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")<br><span style='color:var(--muted);font-size:12px'>目前 "+fmt(cur)+" → 目標 "+fmt(sh)+" 股</span></div>";}
     }
     let html="<div class='sug hold'>目標配置已套用(總資產 "+fmt(capTWD)+" TWD)。以下是<b>與目前持倉的差額</b>,請至券商執行;實際成交不同時至設定頁校正:</div>"
       +(same?"<div class='sug hold'>目前持倉已符合目標,無需交易。</div>":orders);
@@ -833,9 +863,26 @@ $("btnAuto").onclick=async function(){
   }catch(e){toast("失敗:"+e)}
   $("btnAuto").disabled=false;
 };
-$("btnAdd").onclick=function(){
+$("btnAdd").onclick=async function(){
   readUI();
   const add=+$("addCash").value||0;
+  if(add>0){
+    /* 沒有報價時每一檔的缺口都算不出來,allocateCash 只能回「每一檔都已達到
+       或超過目標權重」——把「抓不到價」講成「不用買」,而新裝置正是最常遇到
+       的情況。沒有訊號時 st.risk 是 undefined,風險閘門等於不存在。 */
+    if(!Q.sig||LIVE().some(function(i){return !fin(Q.px[i.id])})){
+      $("btnAdd").disabled=true;$("btnAdd").textContent="抓價中…";
+      try{await fetchAll()}catch(e){ }
+      $("btnAdd").disabled=false;$("btnAdd").textContent="算這筆錢該怎麼分";
+    }
+    const today=todayTPE();
+    const blockers=EG.gateReasons(engCtx(),Q.sig,today);
+    if(blockers.length){
+      $("addOut").innerHTML=blockers.map(function(b){return "<div class='sug block'>"+esc(b)+"</div>"}).join("")
+        +"<div class='sug hold'>閘門沒過就不算加碼分配——算出來的分配會建立在不完整的資料上。</div>";
+      log("加碼試算中止:"+blockers.join(" / "));return;
+    }
+  }
   const st=render(false);
   const r=EG.allocateCash(engCtx(),add,st);
   if(r.kind!=="add"){$("addOut").innerHTML="<div class='sug hold'>"+esc(r.message)+"</div>";return}
@@ -935,7 +982,12 @@ $("btnResetPeak").onclick=function(){
 };
 function renderLog(){$("logBox").innerHTML=S.log.slice(0,40).map(function(l){return "<div class='log'>"+esc(l)+"</div>"}).join("")||"<div class='log'>尚無紀錄</div>"}
 initUI();
-document.addEventListener("change",function(e){if(e.target.matches("input,select")&&!e.target.dataset.p&&e.target.id!=="impFile")readUI()});
+document.addEventListener("change",function(e){
+  if(!e.target.matches("input,select")||e.target.dataset.p||e.target.id==="impFile")return;
+  readUI();
+  /* 改完持有數就要重畫:原本只存檔不重繪,切到持倉頁還是上一次的數字 */
+  render(false);
+});
 (async function(){
   try{
     /* 與 fetchAll 一致:/fx 回應缺 last 欄位時降為 null,不要整段開機失敗 */

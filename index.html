@@ -34,10 +34,12 @@
   --pill-neg-bg:#2c1a20;--pill-neg-ink:#e5566f;
   --pill-warn-bg:#2a2416;--pill-warn-ink:#d9a441;
   --pill-neu-bg:#212023;--pill-neu-ink:#bdbdc0;
-  --radius-card:6px;--radius-control:999px;--radius-input:6px;
-  --gap:24px;--pad:32px;--rail:200px;
-  --control-h:34px;--row-h:42px;
-  --fs-title:26px;--fs-section:20px;--fs-kpi:20px;--fs-body:14px;--fs-small:12px;
+  --radius-card:10px;--radius-control:999px;--radius-input:8px;
+  --gap:24px;--pad:32px;--rail:220px;
+  --control-h:44px;
+  /* 一句話結論的字級:這個 App 每個月只回答一個問題,那句話要最大 */
+  --fs-verdict:40px;
+  --fs-title:32px;--fs-section:22px;--fs-kpi:30px;--fs-body:16px;--fs-small:13px;
   --sans:"Public Sans","Noto Sans TC",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
@@ -59,10 +61,10 @@ a{color:inherit}
 nav{display:flex;flex-direction:column;gap:2px;padding:var(--pad) 12px;
   border-right:1px solid var(--border);position:sticky;top:0;height:100vh;align-content:start}
 .mark{display:block;margin:0 8px 28px;line-height:1.25}
-.mark b{font-family:var(--mono);font-size:19px;font-weight:600;color:var(--accent);display:block}
+.mark b{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--accent);display:block}
 .mark span{font-size:var(--fs-small);color:var(--muted)}
-nav a{display:block;text-decoration:none;color:var(--muted);font-size:var(--fs-body);
-  padding:8px;border-radius:4px;position:relative}
+nav a{display:block;text-decoration:none;color:var(--muted);font-size:17px;font-weight:500;
+  padding:12px 10px;border-radius:6px;position:relative}
 nav a:hover{color:var(--text);background:var(--raised)}
 /* 這個風格的唯一一個動作:選取 = 一條與標籤同寬的 1px 重點色線 */
 nav a.on{color:var(--text)}
@@ -83,36 +85,35 @@ main{padding:var(--pad);min-width:0}
 
 /* ── 面板 ─────────────────────────────────────────────────── */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);
-  padding:20px}
+  padding:24px}
 .card>h2{margin-bottom:16px}
-.cols{display:grid;gap:var(--gap);grid-template-columns:1.4fr 1fr;align-items:start;
-  margin-bottom:var(--gap)}
 .stack{display:grid;gap:var(--gap)}
 
 /* 一組數字 = 一個容器用 1px 線分格,不是四張各自有框的卡 */
 .strip{display:grid;grid-template-columns:repeat(var(--n,4),1fr)}
 .strip>div{padding:0 18px;border-left:1px solid var(--rule);min-width:0}
 .strip>div:first-child{border-left:0;padding-left:0}
-.strip label,.mchip label{display:block;font-size:var(--fs-small);color:var(--muted);margin:0 0 5px}
-.strip b,.mchip b{font-family:var(--mono);font-variant-numeric:tabular-nums;
+.strip label{display:block;font-size:var(--fs-small);color:var(--muted);margin:0 0 5px}
+.strip b{font-family:var(--mono);font-variant-numeric:tabular-nums;
   font-size:var(--fs-kpi);font-weight:500;display:block;line-height:1.25}
-.strip small,.mchip small{display:block;font-size:var(--fs-small);color:var(--muted);margin-top:4px}
+.strip small{display:block;font-size:var(--fs-small);color:var(--muted);margin-top:4px}
 .unit{font-size:var(--fs-small);color:var(--muted);font-weight:400}
 
 /* 風險旗標是狀態,不是裝飾:淡底 + 同色深字 */
-.pill{display:inline-block;padding:3px 10px;border-radius:var(--radius-control);
+.pill{display:inline-block;padding:5px 14px;border-radius:var(--radius-control);
   font-size:var(--fs-small);font-weight:500;background:var(--pill-neu-bg);color:var(--pill-neu-ink)}
 .pill.ok{background:var(--pill-pos-bg);color:var(--pill-pos-ink)}
 .pill.risk{background:var(--pill-neg-bg);color:var(--pill-neg-ink)}
-.big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:26px;font-weight:500;
+.big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:34px;font-weight:500;
   line-height:1.1;letter-spacing:-.02em}
-.big small{display:inline;font-size:14px;color:var(--muted);font-weight:400}
+.big small{display:inline;font-size:16px;color:var(--muted);font-weight:400}
+.big .sep{color:var(--control);font-weight:400;margin:0 2px}
 
 /* ── 分層階梯:這個 App 自己的那個元件 ────────────────────────
    原本是一條彩虹溫度計(彩虹 = 生成式儀表板的招牌)。
    實際的東西是一座階梯:0 / -30 首撥 / -40 現金10% / -50 現金5% / -60,
    目前回撤是一條 1px 重點色線,刻度照真實比例落在 0、50、66.7、83.3、100%。 */
-.ladder{position:relative;height:2px;background:var(--control);margin:22px 0 0}
+.ladder{position:relative;height:3px;background:var(--control);margin:26px 0 0}
 .ladder .fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent);transition:width .45s}
 .rung{position:absolute;top:-4px;width:1px;height:10px;background:var(--control)}
 .mark-dd{position:absolute;top:-9px;width:1px;height:20px;background:var(--accent);
@@ -123,43 +124,51 @@ main{padding:var(--pad);min-width:0}
 .rungs span:first-child{transform:none}
 .rungs span:last-child{transform:translateX(-100%)}
 
+/* ── 一句話結論 ───────────────────────────────────────────────
+   這個 App 每個月只回答一個問題:「要不要動、動什麼」。
+   原本得讀完整張訂單清單才知道答案,結論從來沒被講出來。 */
+.verdictCard{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);padding:32px;margin-bottom:var(--gap)}
+.vhead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+.verdict{font-size:var(--fs-verdict);font-weight:700;line-height:1.12;letter-spacing:-.02em}
+.verdict.act{color:var(--accent)}
+.verdict.warn{color:var(--warning)}
+.verdict.bad{color:var(--negative)}
+.verdictSub{color:var(--muted);font-size:17px;line-height:1.5;max-width:60ch}
+
 /* ── 行動清單 ─────────────────────────────────────────────── */
-#sugBox{display:grid;gap:8px;grid-template-columns:1fr 1fr}
-#sugBox>.sug:first-child,#sugBox>.sug.hold,#sugBox>.sug.block,#sugBox>.empty,
+#sugBox{display:grid;gap:10px;grid-template-columns:1fr 1fr}
+#sugBox:not(:empty){margin-top:24px}
+#sugBox>.sug.hold,#sugBox>.sug.block,
 #sugBox>div:last-child{grid-column:1 / -1}
-/* 第一列是這個月的計畫抬頭,不是一筆訂單——讓它讀起來像一句話 */
-#sugBox>.sug:first-child:not(.hold):not(.block){background:none;border-left:0;
-  padding:0 0 4px;font-weight:600}
-.sug{border-left:1px solid var(--accent);background:var(--raised);font-variant-numeric:tabular-nums;
-  padding:12px 14px;font-size:var(--fs-body);border-radius:0 4px 4px 0}
+.sug{border-left:2px solid var(--accent);background:var(--raised);font-variant-numeric:tabular-nums;
+  padding:15px 18px;font-size:var(--fs-body);border-radius:0 6px 6px 0}
 .sug.sell{border-left-color:var(--negative)}
 .sug.hold{border-left-color:var(--control);color:var(--muted)}
 .sug.block{border-left-color:var(--warning);color:var(--pill-warn-ink)}
-.empty{border:1px dashed var(--control);border-radius:4px;padding:14px;
-  color:var(--muted);font-size:13px;line-height:1.6}
 
 /* ── 持倉 ─────────────────────────────────────────────────── */
-.alloc{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--raised)}
+.alloc{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--raised)}
 .alloc div{transition:width .5s}
 .legend{display:flex;gap:20px;margin-top:12px;font-size:var(--fs-small);color:var(--muted)}
 .legend b{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--text);font-weight:500}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px}
 .holds{display:grid;gap:var(--gap);grid-template-columns:1fr 1fr;margin-bottom:var(--gap)}
 .hcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);
-  padding:16px 18px}
+  padding:20px 22px}
 .hrow{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.hname{font-weight:600;font-size:15px}
+.hname{font-weight:600;font-size:17px}
 .hname .nm{color:var(--muted);font-size:var(--fs-small);font-weight:400;margin-left:6px}
-.chip{display:inline-block;padding:1px 7px;border-radius:var(--radius-control);
-  font-size:11px;background:var(--pill-neu-bg);color:var(--pill-neu-ink);margin-left:7px;font-weight:500}
+.chip{display:inline-block;padding:2px 9px;border-radius:var(--radius-control);
+  font-size:12px;background:var(--pill-neu-bg);color:var(--pill-neu-ink);margin-left:8px;font-weight:500}
 .hval{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;font-size:var(--fs-kpi)}
-.hsub{display:flex;justify-content:space-between;color:var(--muted);font-size:13px;
+.hsub{display:flex;justify-content:space-between;color:var(--muted);font-size:15px;
   font-family:var(--mono);font-variant-numeric:tabular-nums;margin-top:6px}
 /* 進度條:填滿的長度就是真實比例,白刻度是目標 */
-.wtrack{position:relative;height:4px;background:var(--raised);border-radius:2px;margin-top:12px}
-.wfill{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:var(--muted);transition:width .5s}
+.wtrack{position:relative;height:6px;background:var(--raised);border-radius:3px;margin-top:14px}
+.wfill{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--muted);transition:width .5s}
 .wfill.off{background:var(--warning)}
-.wtick{position:absolute;top:-3px;width:1px;height:10px;background:var(--text)}
+.wtick{position:absolute;top:-3px;width:2px;height:12px;background:var(--text)}
 .hfoot{display:flex;justify-content:space-between;align-items:center;margin-top:14px;
   font-size:var(--fs-small);color:var(--muted);gap:10px}
 .hfoot input{width:74px}
@@ -172,7 +181,7 @@ td{padding:12px 0;text-align:right;border-top:1px solid var(--rule);
 th:first-child,td:first-child{text-align:left;font-family:var(--sans)}
 .pos{color:var(--positive)}.neg{color:var(--negative)}.wn{color:var(--warning)}
 input,select,textarea{background:var(--ground);border:1px solid var(--control);color:var(--text);
-  border-radius:var(--radius-input);padding:0 11px;height:40px;width:100%;
+  border-radius:var(--radius-input);padding:0 13px;height:48px;width:100%;
   font:var(--fs-body)/1 var(--mono);font-variant-numeric:tabular-nums}
 textarea{height:auto;padding:10px 11px;line-height:1.5;resize:vertical}
 /* 解析結果:確認過才寫入,所以先用一張表把「現在 → 解析出來」攤開 */
@@ -202,7 +211,7 @@ code{font-family:var(--mono);background:var(--raised);padding:1px 5px;border-rad
    名稱完全看不到也改不了——實測 390px 時溢出 211px。所以窄的時候拆兩行。 */
 .instrow{display:grid;gap:6px;margin-bottom:6px;
   grid-template-columns:92px minmax(140px,1fr) 62px 76px 56px}
-.instrow button{height:40px;padding:0;font-size:12px}
+.instrow button{height:48px;padding:0;font-size:14px}
 @media(max-width:1240px){
   /* 兩行之後列內與列間的間距一樣大,六檔標的會糊成一片 */
   .instrow{grid-template-columns:1fr 76px 72px;margin-bottom:16px;
@@ -216,11 +225,11 @@ code{font-family:var(--mono);background:var(--raised);padding:1px 5px;border-rad
 /* 首列五格在 1240px 以下會讓 7 位數的組合總值撞進隔壁格(實測 1024px 溢出
    32px),改成 3+2 兩列。901px 以下另有兩欄規則,所以這段要限定下界。 */
 @media(min-width:901px) and (max-width:1240px){
-  .strip.lead{grid-template-columns:repeat(3,1fr)}
-  .strip.lead>div:nth-child(4){border-left:0;padding-left:0}
-  .strip.lead>div:nth-child(n+4){border-top:1px solid var(--rule);padding-top:14px;margin-top:14px}
-  /* 同樣的寬度下,壓測的 1.4fr 欄只剩 430px,表格每一格都在折行 */
-  .cols{grid-template-columns:1fr}
+  /* 市場快照四格,這個寬度每格只有 149px,扳機那格(B 106.46 · INR 94.9)
+     16px 等寬約 200px,會跑出卡片。改成兩格一列。 */
+  .strip.snap{grid-template-columns:1fr 1fr}
+  .strip.snap>div:nth-child(odd){border-left:0;padding-left:0}
+  .strip.snap>div:nth-child(n+3){border-top:1px solid var(--rule);padding-top:16px;margin-top:16px}
 }
 
 /* ── 控制項:強調靠反白,不靠顏色 ─────────────────────────── */
@@ -242,7 +251,8 @@ button.wide{width:100%}
 
 /* ── 手機:側欄收成底欄 ───────────────────────────────────── */
 @media(max-width:900px){
-  :root{--pad:16px;--gap:16px;--control-h:42px}
+  :root{--pad:16px;--gap:16px;--control-h:48px;--fs-verdict:30px;--fs-title:26px}
+  .verdictCard{padding:22px}
   .shell{grid-template-columns:1fr}
   nav{flex-direction:row;position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;
     gap:4px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));
@@ -251,7 +261,7 @@ button.wide{width:100%}
   nav a.on::after{left:50%;transform:translateX(-50%);width:28px}
   .mark,.scope{display:none}
   main{padding:var(--pad) var(--pad) 84px}
-  .cols,.holds,.grid2,.sec-row,#sugBox{grid-template-columns:1fr}
+  .holds,.grid2,.sec-row,#sugBox{grid-template-columns:1fr}
   .strip{grid-template-columns:1fr 1fr}
   .strip>div{border-left:0;border-top:1px solid var(--rule);padding:12px 0}
   .strip>div:nth-child(2){border-left:1px solid var(--rule);padding-left:18px}
@@ -259,20 +269,20 @@ button.wide{width:100%}
   .strip>div:nth-child(4){border-left:1px solid var(--rule);padding-left:18px}
   /* 單數的最後一格佔滿整列,不要留半排空白 */
   .strip>div:last-child:nth-child(odd){grid-column:1 / -1;border-left:0;padding-left:0}
+  /* 首列的數字是這一頁最大的字,兩欄一定裝不下:整寬一欄。
+     這一組必須排在 .strip>div:nth-child(2) 之後——兩邊優先序都是 (0,2,1),
+     同分時後面的贏,寫在前面會被 nth-child(2) 的 18px 縮排蓋掉。 */
+  .strip.lead{grid-template-columns:1fr}
+  .strip.lead>div{border-left:0;padding-left:0;border-top:1px solid var(--rule)}
+  .strip.lead>div:first-child{border-top:0}
   /* 快照收成一欄:扳機那格是「B 106.52 · INR 94.9」,擠在半排會撞到螢幕邊 */
   .strip.snap{grid-template-columns:1fr}
   .strip.snap>div{border-left:0;padding-left:0;border-top:1px solid var(--rule)}
   .strip.snap>div:first-child{border-top:0}
   #toast{bottom:88px}
 }
-/* 360 / 375px 的手機:首列兩欄時每格只剩 126px,26px 的 7 位數會切掉右邊。
-   實測 22px + 12px 內縮可容納 10 個字元(八位數的總值);九位數仍會溢出。 */
-@media(max-width:389px){
-  .strip.lead b{font-size:22px}
-  .strip>div:nth-child(2),.strip>div:nth-child(4){padding-left:12px}
-}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-.strip.lead b{font-size:26px}
+.strip.lead b{font-size:34px}
 .card>label:first-child{margin-top:0}
 
 </style></head>
@@ -282,9 +292,7 @@ button.wide{width:100%}
   <span class="mark"><b>2x</b><span>配置台</span></span>
   <a href="#" data-v="today" class="on">今日</a>
   <a href="#" data-v="hold">持倉</a>
-  <a href="#" data-v="stress">壓測</a>
   <a href="#" data-v="set">設定</a>
-  <a href="#" data-v="log">紀錄</a>
   <span class="scope">資料存在這台裝置<br>自動化永不下單</span>
 </nav>
 
@@ -293,10 +301,7 @@ button.wide{width:100%}
 <!-- ═══ 今日 ═══ -->
 <div class="view active" id="view-today">
   <div class="titlebar">
-    <div class="lead">
-      <h1>本月檢查</h1>
-      <div class="heroSub" id="lampSub">正在讀取風險旗標</div>
-    </div>
+    <div class="lead"><h1>本月檢查</h1></div>
     <div class="acts">
       <span class="stamp" id="heroAsof">資料日期 —</span>
       <button class="sec" id="btnRefresh">更新</button>
@@ -304,13 +309,19 @@ button.wide{width:100%}
     </div>
   </div>
 
+  <!-- 一句話結論。原本要讀完整張訂單清單才知道這個月要不要動。 -->
+  <div class="verdictCard">
+    <div class="vhead"><span class="pill ok" id="lampPill">連線中…</span></div>
+    <div class="verdict" id="verdict">讀取中</div>
+    <div class="verdictSub" id="verdictSub">正在向資料來源要市場訊號</div>
+    <div id="sugBox"></div>
+  </div>
+
   <div class="card" style="margin-bottom:var(--gap)">
-    <div class="strip lead" style="--n:5">
-      <div><label>風險旗標</label><span class="pill ok" id="lampPill">連線中…</span></div>
+    <div class="strip lead" style="--n:3">
       <div><label>組合總值</label><b class="big" id="heroV">—</b><small id="heroMiss"></small></div>
-      <div><label>現金水位</label><b class="big" id="heroCash">—<small>%</small></b></div>
-      <div><label>目標水位</label><b class="big"><span id="heroTc">20</span><small>%</small></b></div>
-      <div><label>距峰值</label><b class="big" id="heroDd">—</b></div>
+      <div><label>現金 / 目標</label><b class="big"><span id="heroCash">—</span><small>%</small><span class="sep">/</span><span id="heroTc">20</span><small>%</small></b></div>
+      <div><label>距最高點</label><b class="big" id="heroDd">—</b></div>
     </div>
     <div class="ladder">
       <div class="fill" id="ddFill" style="width:0"></div>
@@ -326,21 +337,16 @@ button.wide{width:100%}
       <span style="left:83.3%">-50</span>
       <span style="left:100%">-60</span>
     </div>
-    <div class="note">綠線是距峰值的回撤。-30% 起首撥,-40% 把現金目標拉到 10%,-50% 拉到 5%;回升要超過門檻 5% 才鬆綁。</div>
-  </div>
-
-  <div class="card" style="margin-bottom:var(--gap)">
-    <h2>本月行動</h2>
-    <div id="sugBox"><div class="empty">尚未執行本月檢查。按右上角「執行月度檢查」會抓一次市場資料,過了訊號、標的、報價、資料日期、匯率五道閘門才產生下單清單;任一道沒過,這裡會指名是哪一道。</div></div>
+    <div class="note">綠線是離最高點跌了多少。跌到 -30% 開始分批加碼,-40%、-50% 各再加一次。</div>
   </div>
 
   <div class="card">
     <h2>市場快照</h2>
     <div class="strip snap">
-        <div><label>SPX / MA12</label><b id="vSMA">—</b><small id="vSMAsub">—</small></div>
-        <div><label>VIX(門檻 32)</label><b id="vVIX">—</b><small id="vVIXsub">—</small></div>
-        <div><label>USD/TWD</label><b id="vFX">—</b><small>複委託換匯</small></div>
-      <div><label>00653L 扳機</label><b id="vTrip" style="font-size:var(--fs-body);white-space:nowrap">—</b><small id="vTripSub">Brent&gt;90 且 INR&gt;96</small></div>
+      <div><label>SPX / 12 月均線</label><b id="vSMA">—</b><small id="vSMAsub">—</small></div>
+      <div><label>VIX(門檻 32)</label><b id="vVIX">—</b><small id="vVIXsub">—</small></div>
+      <div><label>美元兌台幣</label><b id="vFX">—</b><small>複委託換匯</small></div>
+      <div><label>00653L 出場扳機</label><b id="vTrip" style="font-size:var(--fs-body)">—</b><small id="vTripSub">Brent&gt;90 且 INR&gt;96</small></div>
     </div>
   </div>
 </div>
@@ -349,11 +355,10 @@ button.wide{width:100%}
 <div class="view" id="view-hold">
   <div class="titlebar"><div class="lead">
     <h1>持倉</h1>
-    <div class="heroSub" id="holdPnl">白刻度是目標權重,橘色代表超出 25% 容忍帶</div>
+    <div class="heroSub" id="holdPnl">白刻度是目標權重,橘色代表偏離超過容忍帶</div>
   </div></div>
 
   <div class="card" style="margin-bottom:var(--gap)">
-    <h2>配置總覽</h2>
     <div class="alloc"><div id="aCore" style="background:var(--positive);width:0"></div><div id="aSat" style="background:var(--muted);width:0"></div><div id="aCash" style="background:var(--control);width:0"></div></div>
     <div class="legend">
       <span><span class="dot" style="background:var(--positive)"></span>核心 <b id="lgCore">—</b></span>
@@ -364,8 +369,8 @@ button.wide{width:100%}
 
   <div class="holds" id="holdCards"></div>
 
-  <div class="card" id="cashCard" style="margin-bottom:var(--gap)">
-    <div class="hrow"><div class="hname">現金 <span class="nm">定存 / 貨幣基金 · SGOV</span></div><div class="hval" id="cashVal">—</div></div>
+  <div class="card" style="margin-bottom:var(--gap)">
+    <div class="hrow"><div class="hname">現金 <span class="nm">定存 / 貨幣基金</span></div><div class="hval" id="cashVal">—</div></div>
     <div class="hsub"><span id="cashPct">— / 20%</span><span>白刻度 = 目標</span></div>
     <div class="wtrack"><div class="wfill" id="cashFill"></div><div class="wtick" id="cashTick"></div></div>
   </div>
@@ -373,45 +378,10 @@ button.wide{width:100%}
   <div class="card">
     <h2>加碼試算</h2>
     <div class="grid2">
-      <div><label for="addCash">要加碼的金額(TWD)</label><input id="addCash" type="number" placeholder="100000"></div>
+      <div><label for="addCash">要加碼多少錢(TWD)</label><input id="addCash" type="number" placeholder="100000"></div>
       <div style="display:flex;align-items:flex-end"><button class="sec wide" id="btnAdd">算這筆錢該怎麼分</button></div>
     </div>
     <div id="addOut"></div>
-  </div>
-</div>
-
-<!-- ═══ 壓測 ═══ -->
-<div class="view" id="view-stress">
-  <div class="titlebar"><div class="lead">
-    <h1>壓測</h1>
-    <div class="heroSub">定案 D 引擎的歷史表現,以及用目前投入金額跑的 4 年模擬</div>
-  </div></div>
-
-  <div class="cols">
-    <div class="card">
-      <h2>歷史壓力測試</h2>
-      <table>
-        <thead><tr><th>期間</th><th>數字</th><th>本機驗證</th></tr></thead>
-        <tbody>
-          <tr><td>1990–2026 全期</td><td>CAGR 15.2% · MaxDD -62.6%</td><td class="pos">可重現</td></tr>
-          <tr><td>2000-03 最壞起點</td><td>最深 -80% · 13.8 年 1.09x</td><td class="wn">不可重現</td></tr>
-          <tr><td>2015–2026</td><td>CAGR ~20% · MaxDD -36%</td><td class="pos">可重現</td></tr>
-          <tr><td>4 年虧損機率</td><td>~13%(MC 5000 路徑)</td><td class="wn">不可重現</td></tr>
-        </tbody>
-      </table>
-      <div class="note">可重現的兩項以本機 D_RETS 精準吻合(2015 起實測 CAGR 18.3% / MaxDD -34.5%)。
-      不可重現的兩項沿用已佚失的原始回測:D_RETS 是月頻,月底取樣會低估回撤——任何起點的區間回撤在數學上都不可能超過全期的 -62.6%,
-      故 -80% 應為日頻量測結果,兩者可同時成立但不可混用。虧損機率本機實測 11.3–11.6%(10 萬條路徑),差異來自區塊拔靴法的參數選擇。
-      重跑驗證:<code>node test/tools/verify-dataset.js</code></div>
-    </div>
-
-    <div class="card">
-      <h2>Monte Carlo</h2>
-      <button class="sec wide" id="btnMC">用目前投入額跑 4 年模擬</button>
-      <div id="mcOut" class="mono" style="margin-top:16px;font-size:var(--fs-body);line-height:1.7"></div>
-      <div class="note">D_RETS 出處:STEP 3b 全保真引擎月報酬 1990-07~2026-07(432 筆;基準 20 / 防禦 50 / 減碼上限 50 / VIX 32 / SMA 12)。
-      00988A 席位以 NDX 代理回測,實際含經理人主動風險。</div>
-    </div>
   </div>
 </div>
 
@@ -419,33 +389,12 @@ button.wide{width:100%}
 <div class="view" id="view-set">
   <div class="titlebar"><div class="lead">
     <h1>設定</h1>
-    <div class="heroSub">所有資料存在這台裝置的瀏覽器裡,不經任何伺服器</div>
+    <div class="heroSub">資料只存在這台裝置的瀏覽器裡,不經任何伺服器</div>
   </div></div>
 
   <div class="stack">
     <div class="sec-row">
-      <div class="lab"><b>資料來源</b>決定風險旗標的 Cloudflare Worker。換掉它等於換掉整套策略的輸入,改完要重新執行一次月檢。</div>
-      <div class="card"><label for="cfgW">Worker 網址</label><input id="cfgW"></div>
-    </div>
-
-    <div class="sec-row">
-      <div class="lab"><b>投入金額</b>自動分配與 Monte Carlo 都以這個數字當總資產基準。</div>
-      <div class="card"><div class="grid2">
-        <div><label for="cfgCap">金額(萬)</label><input id="cfgCap" type="number" placeholder="100"></div>
-        <div><label for="cfgCcy">幣別</label><select id="cfgCcy"><option>TWD</option><option>USD</option></select></div>
-      </div></div>
-    </div>
-
-    <div class="sec-row">
-      <div class="lab"><b>標的配置</b>目標 % 是相對權重,會自動正規化;基準現金固定 20%。換標的直接改這張表。</div>
-      <div class="card">
-        <div id="instBox"></div>
-        <button class="sec" id="btnAddInst">＋ 新增標的</button>
-      </div>
-    </div>
-
-    <div class="sec-row">
-      <div class="lab"><b>從券商貼上庫存</b>把券商 App 的庫存畫面整段複製貼進來,會解析出股數與成本。也可以直接貼截圖,在這台裝置上辨識成文字(第一次要下載約 5MB 的辨識引擎)。解析結果一定要先確認才會寫入——認錯一個數字就會算出錯的下單清單。</div>
+      <div class="lab"><b>我有哪些、幾股</b>貼券商庫存最快。要先確認才會寫入。</div>
       <div class="card">
         <label for="pasteBox">券商庫存(整段貼上,或直接貼截圖)</label>
         <textarea id="pasteBox" rows="4" placeholder="例:某某正2 1,000 -5,000 現股 00xxxL 100,000 -4.76%&#10;也可以把截圖貼進來,或按下面的「選截圖」"></textarea>
@@ -459,7 +408,7 @@ button.wide{width:100%}
     </div>
 
     <div class="sec-row">
-      <div class="lab"><b>持有數與現金</b>實際成交與建議不同時在此校正。自動分配會依投入金額算出目標股數並直接套用。</div>
+      <div class="lab"><b>手動校正</b>實際成交與建議不同時改這裡。</div>
       <div class="card">
         <label>持有數(股)</label>
         <div class="grid2" id="unitBox"></div>
@@ -467,35 +416,69 @@ button.wide{width:100%}
           <div><label for="cashTWD">現金 TWD(萬)</label><input id="cashTWD" type="number" value="0"></div>
           <div><label for="cashUSD">現金 USD</label><input id="cashUSD" type="number" value="0"></div>
         </div>
-        <div style="margin-top:20px"><button id="btnAuto">自動分配</button></div>
       </div>
     </div>
 
     <div class="sec-row">
-      <div class="lab"><b>維護</b>重設峰值用於大額入金、ETF 分割與反分割之後;匯入用於換裝置或換網域時還原資料。</div>
+      <div class="lab"><b>目標配置</b>目標 % 是相對權重,會自動正規化;現金另外固定 20%。</div>
       <div class="card">
-        <div class="grid2">
-          <button class="sec" id="btnImport">匯入紀錄 JSON</button>
-          <button class="sec" id="btnResetPeak">重設峰值 / 分層</button>
-        </div>
-        <input type="file" id="impFile" accept="application/json" hidden>
+        <div id="instBox"></div>
+        <button class="sec" id="btnAddInst">＋ 新增標的</button>
       </div>
     </div>
-  </div>
-</div>
 
-<!-- ═══ 紀錄 ═══ -->
-<div class="view" id="view-log">
-  <div class="titlebar">
-    <div class="lead">
-      <h1>紀錄</h1>
-      <div class="heroSub">每次月檢、套用與維護動作都會留下一筆,最多保存 500 筆</div>
+    <div class="sec-row">
+      <div class="lab"><b>總投入金額</b>「自動分配」與模擬都用這個數字當總資產。</div>
+      <div class="card">
+        <div class="grid2">
+          <div><label for="cfgCap">金額(萬)</label><input id="cfgCap" type="number" placeholder="100"></div>
+          <div><label for="cfgCcy">幣別</label><select id="cfgCcy"><option>TWD</option><option>USD</option></select></div>
+        </div>
+        <div style="margin-top:20px"><button id="btnAuto">依目標配置自動分配</button></div>
+      </div>
     </div>
-    <div class="acts"><button class="sec" id="btnExport">匯出紀錄 JSON</button></div>
-  </div>
-  <div class="card">
-    <div id="logBox"></div>
-    <div class="note">建議每次月檢後匯出一份 JSON 備份(localStorage 綁網域,清除即消失)。</div>
+
+    <div class="sec-row">
+      <div class="lab"><b>最壞情況</b>這套策略歷史上最糟的時候長什麼樣。看得下去再投。</div>
+      <div class="card">
+        <div class="strip" style="--n:2">
+          <div><label>最深跌幅 1990–2026</label><b class="big">-62.6<small>%</small></b></div>
+          <div><label>同期年化報酬</label><b class="big">15.2<small>%</small></b></div>
+        </div>
+        <table style="margin-top:24px">
+          <thead><tr><th>期間</th><th>數字</th></tr></thead>
+          <tbody>
+            <tr><td>1990–2026 全期</td><td>年化 15.2% · 最深 -62.6%</td></tr>
+            <tr><td>2015–2026</td><td>年化 ~20% · 最深 -36%</td></tr>
+            <tr><td>2000-03 最壞起點 †</td><td>最深 -80% · 13.8 年才 1.09 倍</td></tr>
+            <tr><td>4 年虧損機率 †</td><td>~13%</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:20px"><button class="sec wide" id="btnMC">用目前投入額跑 4 年模擬</button></div>
+        <div id="mcOut" class="mono" style="margin-top:16px;line-height:1.7"></div>
+        <div class="note">† 沿用已佚失的原始回測,本機資料重現不出來(月頻取樣看不到月中低點)。本機實測:2015 起年化 18.3% / 最深 -34.5%,4 年虧損機率 11.3–11.6%。</div>
+      </div>
+    </div>
+
+    <div class="sec-row">
+      <div class="lab"><b>備份</b>資料綁這個網域,瀏覽器清掉就沒了。每次月檢後匯出一份。</div>
+      <div class="card">
+        <div class="grid2">
+          <button class="sec" id="btnExport">匯出 JSON</button>
+          <button class="sec" id="btnImport">匯入 JSON</button>
+        </div>
+        <input type="file" id="impFile" accept="application/json" hidden>
+        <div id="logBox" style="margin-top:22px"></div>
+      </div>
+    </div>
+
+    <div class="sec-row">
+      <div class="lab"><b>進階</b>資料來源決定風險旗標;重設峰值用於大額入金或 ETF 分割後。</div>
+      <div class="card">
+        <label for="cfgW">資料來源(Cloudflare Worker 網址)</label><input id="cfgW">
+        <div style="margin-top:20px"><button class="sec" id="btnResetPeak">重設峰值 / 分層</button></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -564,6 +547,14 @@ const fmt=function(n,d){d=d||0;return Number.isFinite(n)?n.toLocaleString("zh-TW
    未跳脫時名稱含 " 會截斷輸入框並在下次存檔寫回損毀值,匯入他人 JSON 更等於執行任意 HTML */
 const ESC_MAP={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
 const esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return ESC_MAP[c]})};
+/* 一句話結論。這個 App 每個月只回答一個問題:「要不要動、動什麼」,
+   原本得讀完整張訂單清單才看得出答案,結論從來沒被講出來。
+   判斷本身全部來自引擎的 plan.kind,這裡只負責措辭。 */
+function setVerdict(big,sub,tone){
+  $("verdict").textContent=big;
+  $("verdict").className="verdict"+(tone?" "+tone:"");
+  $("verdictSub").textContent=sub||"";
+}
 function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(function(){t.style.display="none"},2800)}
 const save=function(){localStorage.setItem("etf2x",JSON.stringify(S))};
 const log=function(m){S.log.unshift(new Date().toISOString().slice(0,16).replace("T"," ")+" · "+m);S.log=S.log.slice(0,500);save();renderLog()};
@@ -673,7 +664,6 @@ function render(mutate){
   pill.className="pill "+((risk||sigErr)?"risk":"ok");
   pill.textContent=sigErr?"市場訊號無效 · 不可依此操作"
     :(risk?"風險期 · 凍結投入,僅允許減碼":"正常期 · 依三層引擎執行");
-  $("lampSub").textContent="SPX "+fmt(spxL)+(spx.below?" 破":" > ")+"SMA "+fmt(spxM)+" · VIX "+(Number.isFinite(vixL)?vixL.toFixed(1):"—")+(vix.above?" >32":" <32");
   $("heroAsof").textContent="資料日期 "+((s.asof&&s.asof.spx)||"—")+"(過期>4天中止)";
   /* 峰值與分層推進交給引擎。只有在資料完整可信時才推進——
      報價缺失或匯率無效時推進峰值,會把錯誤的低估值記成新峰值。 */
@@ -684,7 +674,7 @@ function render(mutate){
   }
   const stx=EG.computeState(engCtx(),{peak:S.peak,tierTc:S.tierTc,signal:s});
   const dd=stx.dd, cf=stx.cf, tc=stx.tc;
-  $("heroCash").innerHTML=(cf*100).toFixed(1)+"<small>%</small>";
+  $("heroCash").textContent=(cf*100).toFixed(1);
   $("heroTc").textContent=(tc*100);
   /* 總值與回撤各自成一格:回撤是分層階梯的變數,要和階梯放在一起看 */
   $("heroV").textContent=fmt(V);
@@ -746,11 +736,13 @@ function orderText(o){
   return esc(o.id)+(o.side==="buy"?" 買入 ":" 賣出 ")+fmt(o.shares)
     +" 股(約 "+fmt(o.amount)+" TWD)"+(o.warn==="premium"?"(溢價超標,考慮緩買)":"");
 }
+/* 講人話。引擎的 hold 訊息不能動——平價測試比對的就是那個字串——
+   但抬頭這句是呈現層自己組的,可以寫成看得懂的樣子。 */
 function planHead(plan){
   if(plan.kind==="trim")
-    return "第三層減碼:拉現金向 "+(plan.targetCash*100)+"%(單次上限=持股 "+(plan.capFraction*100)+"%)";
-  return "再平衡至目標(現金 "+(plan.targetCash*100)+"%"
-    +(plan.tieredBuy?",分層抄底作用中 dd "+(plan.dd*100).toFixed(0)+"%":"")+")";
+    return "把現金拉回 "+(plan.targetCash*100)+"%,這次最多賣掉手上持股的 "+(plan.capFraction*100)+"%。";
+  return "把每一檔拉回目標比例,現金留 "+(plan.targetCash*100)+"%。"
+    +(plan.tieredBuy?"目前離最高點 "+(plan.dd*100).toFixed(0)+"%,分批加碼作用中。":"");
 }
 /**
  * 決策委由共用引擎,本函式只做兩件事:
@@ -768,6 +760,7 @@ function makePlan(st){
       +"。請回報此情況,勿手動推算下單。"};
   }
   return{
+    kind:plan.kind,
     orders:plan.orders.map(function(o){return{m:orderText(o),side:o.side}}),
     units:plan.units,cash:plan.cash,
     head:planHead(plan),headSide:plan.kind==="trim"?"sell":"buy"
@@ -803,18 +796,21 @@ async function runCheck(){
     const blockers=EG.gateReasons(engCtx(),Q.sig,today);
     if(blockers.length){
       render(false);
-      $("sugBox").innerHTML=blockers.map(function(b){return "<div class='sug block'>"+esc(b)+"</div>"}).join("")
-        +"<div class='sug hold'>本次不產生任何下單建議,亦不更新峰值與分層狀態。稍後重試。</div>";
+      setVerdict("本月不下單","下面這幾道沒過。資料不完整時不猜,也不更新最高點與分層狀態。","warn");
+      $("sugBox").innerHTML=blockers.map(function(b){return "<div class='sug block'>"+esc(b)+"</div>"}).join("");
       log("月檢中止:"+blockers.join(" / "));return;
     }
     const st=render(true);
     const plan=makePlan(st);
     let html="";
-    if(plan.hold)html="<div class='sug hold'>"+plan.hold+"</div>";
-    else{
-      html="<div class='sug "+(plan.headSide==="sell"?"sell":"")+"'>"+plan.head+"</div>"
-        +plan.orders.map(function(o){return "<div class='sug "+(o.side==="sell"?"sell":"")+"'>"+o.m+"</div>"}).join("")
-        +"<div style='margin-top:10px'><button class='sec' id='btnApply'>已照單下單 → 一鍵套用持倉</button></div>";
+    if(plan.hold){
+      setVerdict("本月無動作",plan.hold);
+    }else{
+      const n=plan.orders.length;
+      setVerdict(plan.kind==="trim"?("風險期:減碼 "+n+" 筆"):("本月要下 "+n+" 筆單"),
+        plan.head,plan.kind==="trim"?"bad":"act");
+      html=plan.orders.map(function(o){return "<div class='sug "+(o.side==="sell"?"sell":"")+"'>"+o.m+"</div>"}).join("")
+        +"<div style='margin-top:14px'><button id='btnApply'>已照單下單 → 一鍵套用持倉</button></div>";
     }
     $("sugBox").innerHTML=html;
     if(!plan.hold)$("btnApply").onclick=function(){applyPlan(plan,"月檢建議")};
@@ -835,6 +831,8 @@ $("btnAuto").onclick=async function(){
     /* 訊號無效時不可當成「沒有風險」放行——那會在崩盤裡一次投入 80% */
     const sigErr=sigBad(Q.sig);
     if(sigErr||Q.sig.risk_flag){
+      setVerdict(sigErr?"市場訊號無效":"風險期,不投入",
+        sigErr?"無法確認風險狀態,自動分配中止。":"規格是風險期凍結投入,等旗標熄滅再來。","bad");
       $("sugBox").innerHTML="<div class='sug block'>"+(sigErr
         ?"市場訊號無效:"+esc(sigErr)+"——無法確認風險狀態,自動分配中止。"
         :"風險旗標亮著。規格:風險期凍結投入——自動分配暫停,等旗標熄滅再來。")+"</div>";
@@ -1093,9 +1091,16 @@ document.addEventListener("change",function(e){
     Q.fx=await j("/fx").then(function(d){return sanad(d&&d.last&&d.last[1])},function(){return null});
     const sigErr=sigBad(Q.sig);
     /* 燈號由 render 依 sigBad 自行 fail closed,這裡只補上具體原因 */
-    if(sigErr){render(false);$("lampSub").textContent=sigErr;return}
-    if(LIVE().some(function(i){return (S.units[i.id]||0)>0}))await runCheck();
-    else render(false);
-  }catch(e){const p=$("lampPill");p.className="pill risk";p.textContent="無法連線 Worker";$("lampSub").textContent=String(e)}
+    if(sigErr){render(false);setVerdict("市場訊號無效",sigErr,"bad");return}
+    if(LIVE().some(function(i){return (S.units[i.id]||0)>0})){
+      await runCheck();
+    }else{
+      render(false);
+      setVerdict("還沒有持股","到「設定」把券商庫存貼上來,或手動填入持有數,這頁就會告訴你這個月要不要動。");
+    }
+  }catch(e){
+    const p=$("lampPill");p.className="pill risk";p.textContent="無法連線";
+    setVerdict("連不上資料來源",String(e),"bad");
+  }
 })();
 </script></body></html>

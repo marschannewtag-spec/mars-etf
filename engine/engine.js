@@ -419,11 +419,13 @@
       }
     });
 
-    /* 目標權重合計必須為 1(現金 + 各標的)。
-       這個檢查原本只寫在測試裡,沒有接進執行路徑。 */
-    if (plan.targetCash != null && !weightsSumToOne(ctx.inst, plan.targetCash)) {
-      bad.push("目標權重合計不為 1——請檢查各標的的目標權重");
-    }
+    /* 這裡刻意沒有「權重合計為 1」的檢查。
+       weightsSumToOne 看似是一道防線,實際上是恆真式:
+         Σ targetWeight = (1-tc) * Σtgt/Σtgt = 1-tc,加上 tc 恆為 1。
+       唯一會是 false 的情況是 Σtgt = 0(含正負互相抵銷)導致 NaN,
+       而那個情況 makePlan 開頭的閘門已經擋掉了。
+       接進來只會多一行永遠不會觸發的程式碼——突變測試證實移除它不會讓任何測試變紅。
+       它留在 invariant.test.js 當作「正規化後合計為 1」這個性質的可讀斷言。 */
 
     /* 減碼不得超過持股的 CAP。
        股數必須整數化,nu = floor(cur*(1-r)) 一律向下取整,

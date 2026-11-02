@@ -126,17 +126,21 @@ describe("防線 · 目標權重合計為 0", () => {
     a.strictEqual(plan.orders, undefined, "不得附任何訂單");
   });
 
-  it("權重合計不為 1 的計畫會被不變量攔下(weightsSumToOne 已接進執行路徑)", (a) => {
-    const { ctx, st, plan } = scenario();
-    a.notStrictEqual(plan.kind, "hold");
-    /* 事後把其中一檔的目標權重改掉,使合計不再是 1 */
-    const ctx2 = Object.assign({}, ctx, {
-      inst: [{ id: "A", tgt: 0.50, src: "tw" }, { id: "B", tgt: 0.30, src: "tw" }, { id: "C", tgt: 0.20, src: "tw" }],
+  /* weightsSumToOne 不該被接進 checkInvariants:它是恆真式。
+     Σ targetWeight = (1-tc)*Σtgt/Σtgt = 1-tc,加上 tc 恆為 1。
+     唯一例外是 Σtgt=0 導致 NaN,而那個情況上面的閘門已經擋掉。
+     這裡把這個推理釘住,免得日後有人「順手」再加一道假防線。 */
+  it("weightsSumToOne 是恆真式,不適合當執行期不變量", (a) => {
+    [[[{ id: "A", tgt: 0.5 }, { id: "B", tgt: 0.3 }], 0.20],
+     [[{ id: "A", tgt: 7 }, { id: "B", tgt: 0.001 }], P.DEF],
+     [[{ id: "A", tgt: 0.5 }], 0.05]].forEach(([inst, tc]) => {
+      a.strictEqual(E.weightsSumToOne(inst, tc), true,
+        `Σtgt=${E.weightSum(inst)} tc=${tc} 時正規化後必然為 1`);
     });
-    a.strictEqual(E.weightsSumToOne(ctx2.inst, plan.targetCash), true,
-      "正規化後合計本來就是 1,這個函式只在分母異常時會是 false");
-    a.strictEqual(E.weightsSumToOne(zeroInst(), P.BASE), false,
-      "權重全 0 時合計不為 1");
+    /* 只有分母為 0 才會是 false——而那由閘門負責,不是不變量 */
+    a.strictEqual(E.weightsSumToOne(zeroInst(), P.BASE), false);
+    a.strictEqual(E.weightsSumToOne([{ id: "A", tgt: 0.5 }, { id: "B", tgt: -0.5 }], P.BASE), false,
+      "正負抵銷也是分母為 0");
   });
 
   it("沒有任何標的時行為不變(由呼叫端的閘門處理)", (a) => {
@@ -199,6 +203,24 @@ describe("防線 · 匯入驗證", () => {
 
   it("最外層不是物件就拒絕", (a) => {
     [null, [], "x", 3].forEach(v => a.ok(E.validateImport(v), JSON.stringify(v) + " 應被拒絕"));
+  });
+
+  /* index.html 的 369 行 glue 與 DOM 糾纏,無法 require 進來實測。
+     在抽成可測模組之前,至少把「呼叫點存在」釘住——
+     否則防線寫好了卻沒接上,測試照樣全綠。
+     shortcut: 只驗原始碼有呼叫,不驗實際行為;等 glue 抽成模組後改為真的跑一次匯入 */
+  it("index.html 的匯入確實呼叫 validateImport", (a) => {
+    const fs = require("fs"), path = require("path");
+    const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+    a.match(html, /EG\.validateImport\(o\)/, "匯入處必須呼叫 validateImport");
+    a.match(html, /if\(why\)throw why/, "驗證結果必須真的阻止寫入");
+  });
+
+  it("index.html 的自動分配有擋權重為 0(它不走 makePlan)", (a) => {
+    const fs = require("fs"), path = require("path");
+    const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+    a.match(html, /if\(!\(INV\(\)>0\)\)/,
+      "btnAuto 自己算配股,INV() 為 0 時會把 NaN 寫進持倉");
   });
 
   it("整合:被拒絕的檔案若硬塞進引擎,會造出假回撤——這就是要攔的原因", (a) => {

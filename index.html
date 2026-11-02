@@ -204,7 +204,8 @@ code{font-family:var(--mono);background:var(--raised);padding:1px 5px;border-rad
   grid-template-columns:92px minmax(140px,1fr) 62px 76px 56px}
 .instrow button{height:40px;padding:0;font-size:12px}
 @media(max-width:1240px){
-  .instrow{grid-template-columns:1fr 76px 72px;
+  /* 兩行之後列內與列間的間距一樣大,六檔標的會糊成一片 */
+  .instrow{grid-template-columns:1fr 76px 72px;margin-bottom:16px;
     grid-template-areas:"code code pct" "name pocket del"}
   .instrow>:nth-child(1){grid-area:code}
   .instrow>:nth-child(2){grid-area:name}

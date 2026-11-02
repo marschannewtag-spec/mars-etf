@@ -458,3 +458,269 @@ describe("防線 · 回測資料與網頁解耦", () => {
     a.match(mc.slice(0, 600), /catch\(e\)\{toast\(/, "抓資料失敗必須 toast,不是丟 undefined 進迴圈");
   });
 });
+
+/* ─────────────────────────────────────────────────────────────────
+   9. 成本、損益、加碼、券商貼上 — 全部直接碰錢
+   ───────────────────────────────────────────────────────────────── */
+
+describe("防線 · 成本與未實現損益", () => {
+  const cost = { A: 9000, B: 2800 };
+  const units = { A: 100, B: 10 };
+
+  it("算得出來就算,算不出來回報 null 而不是 0", (a) => {
+    /* 成本未知時回 0 會讓損益等於市值,畫面上看起來像賺了一整個部位 */
+    const got = E.pnlOf(INST[0], units, cost, PRICES, 32.6);
+    a.strictEqual(got.cost, 9000);
+    a.strictEqual(got.value, 10000);
+    a.strictEqual(got.pnl, 1000);
+    const none = E.pnlOf(INST[0], units, {}, PRICES, 32.6);
+    a.strictEqual(none.cost, null, "不知道就說不知道");
+    a.strictEqual(none.pnl, null);
+    a.strictEqual(none.pct, null);
+  });
+
+  it("報價缺失時損益也不可編", (a) => {
+    const got = E.pnlOf(INST[0], units, cost, {}, 32.6);
+    a.strictEqual(got.value, null);
+    a.strictEqual(got.pnl, null);
+  });
+
+  it("總計只加總成本已知的,並數出有幾檔沒算進去", (a) => {
+    const ctx = { inst: INST, units: units, cost: { A: 9000 }, prices: PRICES, fx: 32.6 };
+    const t = E.pnlTotal(ctx);
+    a.strictEqual(t.cost, 9000, "B 的成本未知,不可併進分母");
+    a.strictEqual(t.value, 10000);
+    a.strictEqual(t.missing, 1, "要講出有一檔沒算到");
+  });
+
+  it("持倉頁確實顯示未計入的檔數", (a) => {
+    const html = readHtml();
+    a.match(html, /EG\.pnlOf\(i,S\.units,S\.cost,Q\.px,Q\.fx\)/, "每一檔要走引擎");
+    a.match(html, /tot\.missing\?/, "成本未知的檔數必須說出來,不可悄悄少算");
+  });
+});
+
+describe("防線 · 成本要跟著計畫走", () => {
+  const ctx = { inst: INST, prices: PRICES, fx: 32.6 };
+
+  it("買進把成交金額加進成本", (a) => {
+    a.deepStrictEqual(E.costAfter({ A: 9000 }, { A: 100 }, { units: { A: 150 } }, ctx), { A: 14000 });
+  });
+
+  it("賣出按比例扣,剩下的平均成本不變", (a) => {
+    const after = E.costAfter({ A: 9000 }, { A: 100 }, { units: { A: 40 } }, ctx);
+    a.strictEqual(after.A, 3600);
+    a.strictEqual(after.A / 40, 9000 / 100, "平均成本不因賣出而改變");
+  });
+
+  it("從 0 股買進:成本就是這次的成交金額", (a) => {
+    a.deepStrictEqual(E.costAfter({}, {}, { units: { A: 80 } }, ctx), { A: 8000 });
+  });
+
+  it("本來就不知道成本的,買賣一次不會讓它變成已知", (a) => {
+    /* 用現價倒推會編出一個假成本,下個月的損益就是錯的 */
+    a.deepStrictEqual(E.costAfter({}, { A: 10 }, { units: { A: 80 } }, ctx), { A: null });
+  });
+
+  it("報價缺失時不可硬算", (a) => {
+    a.deepStrictEqual(E.costAfter({ A: 9000 }, { A: 10 }, { units: { A: 80 } },
+      { inst: INST, prices: {}, fx: 32.6 }), { A: null });
+  });
+
+  it("一鍵套用確實維護成本", (a) => {
+    const html = readHtml();
+    a.match(html, /EG\.costAfter\(S\.cost,S\.units,plan,engCtx\(\)\)/, "套用時必須更新成本");
+    const apply = html.slice(html.indexOf("async function applyPlan"));
+    a.ok(apply.indexOf("EG.costAfter") < apply.indexOf("S.units[k]=plan.units[k]"),
+      "要先用舊持股算成本,寫完新持股就算不出來了");
+  });
+});
+
+describe("防線 · 加碼分配", () => {
+  const ctx = {
+    inst: INST, units: { A: 100, B: 10 }, cost: {}, prem: {},
+    prices: PRICES, fx: 32.6, cashTWD: 5000, cashUSD: 0
+  };
+  const state = (over) => Object.assign(
+    E.computeState(ctx, { peak: 0, tierTc: P.BASE, signal: okSignal() }), over || {});
+
+  it("只買不賣", (a) => {
+    const r = E.allocateCash(ctx, 100000, state());
+    a.strictEqual(r.kind, "add");
+    a.ok(r.orders.length > 0);
+    a.ok(r.orders.every(o => o.side === "buy"), "加碼不可產生賣單——重配是 makePlan 的事");
+  });
+
+  it("錢配到最缺的那幾檔,比例就是缺口比例", (a) => {
+    const r = E.allocateCash(ctx, 100000, state());
+    const sum = r.orders.reduce((s, o) => s + o.share, 0);
+    a.ok(sum > 0.99 && sum <= 1.0001, "缺口占比合計應為 1:" + sum);
+    const a0 = r.orders.find(o => o.id === "A");
+    a.ok(a0 && a0.share > 0.5, "A 的目標權重較高、現值較低,應拿到較多");
+  });
+
+  it("投入金額加剩餘等於加碼金額", (a) => {
+    const r = E.allocateCash(ctx, 100000, state());
+    a.ok(Math.abs(r.spend + r.left - 100000) < 1, "錢不可憑空多出或消失");
+  });
+
+  it("風險期不配——規格是凍結投入,新錢也是投入", (a) => {
+    const r = E.allocateCash(ctx, 100000, state({ risk: true }));
+    a.strictEqual(r.kind, "hold");
+    a.match(r.message, /凍結投入/);
+  });
+
+  it("加碼後現金仍低於目標水位就全部留現金", (a) => {
+    /* 這筆錢的用途是把現金補回水位,不是買股 */
+    const poor = Object.assign({}, ctx, { cashTWD: 0 });
+    const st = E.computeState(poor, { peak: 0, tierTc: P.DEF, signal: okSignal() });
+    const r = E.allocateCash(poor, 100, st);
+    a.strictEqual(r.kind, "hold");
+    a.match(r.message, /低於目標水位/);
+  });
+
+  it("權重全為 0 不可往下算", (a) => {
+    const zero = Object.assign({}, ctx, { inst: INST.map(i => Object.assign({}, i, { tgt: 0 })) });
+    a.match(E.allocateCash(zero, 100000, state()).message, /權重合計為 0/);
+  });
+
+  it("金額太小分不到最小交易門檻就說清楚,不產生碎單", (a) => {
+    const r = E.allocateCash(ctx, 60, state());
+    a.strictEqual(r.kind, "hold", "得到:" + JSON.stringify(r));
+  });
+
+  it("沒填金額不可當成 0 元加碼", (a) => {
+    a.match(E.allocateCash(ctx, 0, state()).message, /填入/);
+    a.match(E.allocateCash(ctx, -5, state()).message, /填入/);
+  });
+
+  it("已經超過目標權重的那一檔,一塊錢都不給", (a) => {
+    /* 缺口為負的不可納入分母:納入會讓分母變小,其他檔分到超過自己的缺口,
+       等於用加碼去追一個它本來就不該追的權重。賣出是 makePlan 的事。 */
+    const over = Object.assign({}, ctx, { units: { A: 100, B: 200 } });
+    const st = E.computeState(over, { peak: 0, tierTc: P.BASE, signal: okSignal() });
+    const r = E.allocateCash(over, 100000, st);
+    a.strictEqual(r.kind, "add");
+    a.ok(!r.orders.some(o => o.id === "B"), "B 已超重,不該出現在加碼清單:"
+      + r.orders.map(o => o.id).join(","));
+    const sum = r.orders.reduce((s, o) => s + o.share, 0);
+    a.ok(sum <= 1.0001, "缺口占比合計不可超過 1,得到 " + sum);
+  });
+
+  it("分到某一檔的錢買得起一股、卻低於最小交易門檻時,不下那一筆", (a) => {
+    /* 整股買得起不代表值得買:一筆低於總值 0.5% 的單只是付手續費 */
+    const rich = Object.assign({}, ctx, { units: { A: 100, B: 70 }, cashTWD: 20000 });
+    const st = E.computeState(rich, { peak: 0, tierTc: P.BASE, signal: okSignal() });
+    const r = E.allocateCash(rich, 150, st);
+    a.strictEqual(r.kind, "hold", "得到:" + JSON.stringify(r));
+    a.match(r.message, /最小交易門檻/);
+  });
+
+  it("持倉頁確實接上了", (a) => {
+    const html = readHtml();
+    a.match(html, /EG\.allocateCash\(engCtx\(\),add,st\)/, "寫好沒接上,測試照樣全綠");
+  });
+});
+
+describe("防線 · 券商庫存貼上", () => {
+  /* 真實券商庫存畫面的文字:名稱那一行是股數與損益,代碼那一行是市值與損益率 */
+  const B_INST = [
+    { id: "00631L", name: "元大台灣50正2", tgt: 0.10, src: "tw", pocket: "core" },
+    { id: "00670L", name: "富邦NASDAQ正2", tgt: 0.30, src: "tw", pocket: "core" }
+  ];
+  const B_PX = { "00631L": 33.75, "00670L": 184.40 };
+  const PASTE = [
+    "全部庫存",
+    "股票名稱/類別 股數/市值 損益/損益率",
+    "元大台灣50正2 2,000 -627",
+    "現股 00631L 67,500 -0.93%",
+    "富邦NASDAQ正2 500 -7,016",
+    "現股 00670L 92,200 -7.07%",
+    "某某生技 300 674",
+    "現股 00897 12,345 0.23%"
+  ].join("\n");
+  const by = (t) => {
+    const o = {};
+    E.parseBrokerPaste(t, B_INST, B_PX, 32.6).rows.forEach(x => { o[x.id] = x; });
+    return o;
+  };
+
+  it("認出股數與市值,並由損益率回推成本", (a) => {
+    const r = by(PASTE);
+    a.strictEqual(r["00631L"].units, 2000);
+    a.strictEqual(r["00631L"].value, 67500);
+    a.strictEqual(r["00631L"].cost, Math.round(67500 / (1 - 0.0093)));
+    a.strictEqual(r["00631L"].sure, true, "股數 × 現價 ≈ 市值,對得上");
+    a.strictEqual(r["00670L"].units, 500);
+    a.strictEqual(r["00670L"].value, 92200);
+  });
+
+  it("回推的成本與「市值 − 損益」相差不到千分之一", (a) => {
+    /* 損益率是四捨五入後的,所以不會完全相等;差太多就代表認錯欄位了 */
+    const r = by(PASTE);
+    const direct = 67500 + 627;
+    a.ok(Math.abs(r["00631L"].cost - direct) / direct < 0.001,
+      r["00631L"].cost + " vs " + direct);
+  });
+
+  it("對不上「股數 × 現價 ≈ 市值」就標成不確定", (a) => {
+    const r = E.parseBrokerPaste(PASTE, B_INST, {}, 32.6);
+    a.ok(r.rows.every(x => x.sure === false), "沒有報價就不該說自己確定");
+  });
+
+  it("股數抓錯時不可宣稱確定", (a) => {
+    const bad = "元大台灣50正2 99,999 -1\n現股 00631L 67,500 -0.93%";
+    a.strictEqual(by(bad)["00631L"].sure, false, "99,999 × 33.75 與市值 67,500 差太遠");
+  });
+
+  it("代碼必須是完整的一個 token", (a) => {
+    /* 指名 00631L 不可以被 X00631LY 這種字串釣走 */
+    const r = E.parseBrokerPaste("X00631LY 1 1", B_INST, B_PX, 32.6);
+    a.deepStrictEqual(r.rows, []);
+  });
+
+  it("講出設定頁沒有的代碼——那是漏記的持股", (a) => {
+    const r = E.parseBrokerPaste(PASTE, B_INST, B_PX, 32.6);
+    a.ok(r.unknown.indexOf("00897") >= 0, "得到:" + r.unknown.join(","));
+  });
+
+  it("文字裡沒有任何已設定的代碼就回空清單,不可亂猜", (a) => {
+    a.deepStrictEqual(E.parseBrokerPaste("今天天氣很好 1,234 5,678", B_INST, B_PX, 32.6).rows, []);
+  });
+
+  it("空字串與 null 不可爆掉", (a) => {
+    a.deepStrictEqual(E.parseBrokerPaste("", B_INST, B_PX, 32.6).rows, []);
+    a.deepStrictEqual(E.parseBrokerPaste(null, B_INST, B_PX, 32.6).rows, []);
+  });
+
+  it("解析結果必須先確認才寫入", (a) => {
+    const html = readHtml();
+    a.match(html, /EG\.parseBrokerPaste\(\$\("pasteBox"\)\.value,INST,Q\.px,Q\.fx\)/);
+    /* 解析那一段只能讀 S.units 來顯示「目前股數」,不可以指派 */
+    const parse = html.slice(html.indexOf('$("btnParse").onclick'),
+                             html.indexOf("async function applyParsed"));
+    a.ok(!/S\.(units|cost)\[[^\]]*\]\s*=/.test(parse), "解析階段不可寫入持股或成本");
+    a.ok(!/save\(\)/.test(parse), "解析階段不可存檔");
+    a.match(html, /btnPasteApply/, "必須有一個明確的套用按鈕");
+  });
+
+  it("套用時把股數夾成非負整數", (a) => {
+    const apply = readHtml().slice(readHtml().indexOf("async function applyParsed"));
+    a.match(apply, /Math\.max\(0,Math\.floor\(x\.units\)\)/, "貼上的文字是不信任輸入");
+  });
+});
+
+describe("防線 · 成本是狀態的一部分", () => {
+  it("匯入驗證認得 cost,負數要擋", (a) => {
+    a.strictEqual(E.validateImport({ cost: { A: 1000 } }), null);
+    a.strictEqual(E.validateImport({ cost: { A: null } }), null, "null 代表成本未知,是合法的");
+    a.match(E.validateImport({ cost: { A: -1 } }), /成本/);
+    a.match(E.validateImport({ cost: [] }), /cost/);
+  });
+
+  it("刪標的時成本一起刪", (a) => {
+    const html = readHtml();
+    a.match(html, /delete S\.units\[gone\.id\];delete S\.cost\[gone\.id\]/,
+      "殘留成本會在同一代碼加回來時配上新的股數,算出假的損益");
+  });
+});

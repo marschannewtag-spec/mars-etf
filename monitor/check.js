@@ -118,8 +118,10 @@ function evaluate(prev, obs, today) {
   /* 3. 資料過期 */
   const stale = E.staleDays(sig, today);
   if (stale > E.PARAMS.STALE) {
-    push("stale", `市場資料過期 ${stale} 天`,
-      `最新資料日期 ${sig.asof.spx},已超過 ${E.PARAMS.STALE} 天門檻。\n\n`
+    /* 標題不可含天數:天數每天加一會讓標題每天不同,去重永遠對不上,
+       上游停更七天就開七個 Issue。天數放內文,標題保持固定。 */
+    push("stale", "市場資料過期",
+      `最新資料日期 ${sig.asof.spx},已過期 ${stale} 天,超過 ${E.PARAMS.STALE} 天門檻。\n\n`
       + "配置台會中止月檢並拒絕更新峰值與分層狀態。上游可能停更。");
   }
 
@@ -207,8 +209,13 @@ function reasonText(s) {
 
 async function main() {
   let prev = null;
+  /* 只有「檔案不存在」才算首次執行。
+     原本這裡吞掉所有錯誤,於是心跳一旦損毀就被當成首次執行——
+     而翻轉判斷是 `if (prev && ...)`,prev 為空就不比對,
+     結果風險旗標翻轉完全靜默,下一次又把壞檔覆蓋掉,連證據都沒了。
+     shortcut: 損毀時讓 job 紅掉而非發通知;等每週心跳(死人開關)上線後改為警報 */
   try { prev = JSON.parse(fs.readFileSync(HEARTBEAT, "utf8")); }
-  catch (e) { /* 首次執行 */ }
+  catch (e) { if (e.code !== "ENOENT") throw new Error("心跳檔無法讀取,拒絕以『首次執行』繼續:" + e.message); }
 
   const obs = await observe();
   const { alerts, state } = evaluate(prev, obs, taipeiToday());

@@ -494,6 +494,8 @@ $("btnRefresh").onclick=runCheck;
 $("btnAddInst").onclick=function(){INST.push({id:"",name:"",tgt:0.05,src:"tw",pocket:"sat"});save();initUI()};
 $("btnAuto").onclick=async function(){
   readUI();if(!S.cap){toast("先填投入金額");return}
+  /* 自動分配沒有走 makePlan,所以要自己擋:INV() 為 0 時配股數會是 NaN 並寫進持倉 */
+  if(!(INV()>0)){toast("各標的目標權重合計為 0,請先填入權重");return}
   $("btnAuto").disabled=true;
   try{
     await fetchAll();
@@ -556,7 +558,9 @@ $("impFile").onchange=function(){
   const r=new FileReader();
   r.onload=function(){
     try{const o=JSON.parse(r.result);
-      if(!o||typeof o!=="object"||Array.isArray(o))throw "格式錯誤";
+      /* 拒絕而非自動修正:損壞的備份若被悄悄夾正,會繼續產生看似正常的建議 */
+      const why=EG.validateImport(o);
+      if(why)throw why;
       localStorage.setItem("etf2x",JSON.stringify(o));location.reload();
     }catch(e){toast("匯入失敗:"+e)}
   };r.readAsText(f);

@@ -67,11 +67,15 @@
   /**
    * 目標權重總和。標的的 tgt 是「相對權重」,實際目標需除以此總和正規化。
    * 空白列不計入——否則真實標的會被等比稀釋,等於有資金被永遠買不到的標的佔住。
+   *
+   * 可能回傳 0(全部權重為 0)。呼叫端必須先擋下,不可直接當分母——
+   * 原本這裡退回預設值 0.8 以免除以零,但那只是讓每檔目標都算成 0,
+   * 結果是「建議清倉」且所有不變量都通過。掩蓋錯誤比爆掉更危險。
    */
   function weightSum(inst) {
     var t = 0;
     live(inst).forEach(function (i) { t += (+i.tgt || 0); });
-    return t || 0.8;
+    return t;
   }
 
   /** 單一標的的目標權重(佔總資產),已扣除現金水位並正規化 */
@@ -173,6 +177,41 @@
     return !!s.risk_flag === d;
   }
 
+  /**
+   * 驗證匯入的狀態檔。回傳 null 代表通過,否則回傳拒絕原因字串。
+   *
+   * 匯入是這個 App 唯一的不信任輸入——它整份覆蓋 localStorage。
+   * 刻意「拒絕」而非「自動夾取」:悄悄把 -500 股修成 0,會讓一份損壞的備份
+   * 繼續產生看起來正常的投資建議,使用者永遠不知道資料壞過。
+   * 實測負股數會造出 -70% 的假回撤,觸發分層抄底最深一格,並寫進峰值永久污染。
+   *
+   * (設定頁即時輸入的數字由 readUI 夾取,那是當下的輸入,不是損壞的檔案。)
+   */
+  function validateImport(o) {
+    if (!o || typeof o !== "object" || Array.isArray(o)) return "最外層必須是一個物件";
+    if (o.units != null) {
+      if (typeof o.units !== "object" || Array.isArray(o.units)) return "units 必須是物件";
+      for (var k in o.units) {
+        if (!Number.isInteger(o.units[k]) || o.units[k] < 0) {
+          return "持股必須是非負整數:" + k + " = " + o.units[k];
+        }
+      }
+    }
+    var nonNeg = ["peak", "cashTWD", "cashUSD", "cap"];
+    for (var n = 0; n < nonNeg.length; n++) {
+      var v = o[nonNeg[n]];
+      if (v != null && !(Number.isFinite(v) && v >= 0)) return nonNeg[n] + " 必須是非負數:" + v;
+    }
+    if (o.tierTc != null) {
+      var lo = PARAMS.LADDER.reduce(function (m, a) { return Math.min(m, a[1]); }, PARAMS.BASE);
+      var hi = Math.max(PARAMS.BASE, PARAMS.DEF);
+      if (!(Number.isFinite(o.tierTc) && o.tierTc >= lo && o.tierTc <= hi)) {
+        return "tierTc 必須落在 [" + lo + ", " + hi + "]:" + o.tierTc;
+      }
+    }
+    return null;
+  }
+
   /** 市場資料延遲天數。today 為 YYYY-MM-DD 字串 */
   function staleDays(s, today) {
     if (!s || !s.asof || !s.asof.spx) return Infinity;
@@ -234,6 +273,12 @@
     var V = st.V, cash = st.cash, cf = st.cf, tc = st.tc, dd = st.dd;
     var units0 = ctx.units || {}, prem = ctx.prem || {};
     var list = live(ctx.inst);
+
+    /* 權重合計為 0 無法推算配置。不可讓它往下跑——見 weightSum 的註解。
+       「沒有任何標的」是另一回事(呼叫端的閘門會先擋),行為維持原樣。 */
+    if (list.length && !(weightSum(ctx.inst) > 0)) {
+      return { kind: "hold", message: "各標的的目標權重合計為 0——請至設定頁填入目標權重。本期不產生任何建議" };
+    }
 
     /* ── 風險期:凍結投入,只允許減碼 ── */
     if (st.risk) {
@@ -351,6 +396,35 @@
       bad.push("風險期出現買單——凍結投入規格被違反");
     }
 
+    /* 訂單與持股必須自洽。
+       計畫裡有兩份資料:orders 是使用者拿去券商執行的,units 是 App 事後記錄的。
+       原本只驗 units,於是訂單方向反轉、股數爆增都能通行——而人照著訂單下單。
+       兩者分歧會讓實際部位與紀錄無聲走偏,下個月的計算又以錯的紀錄為基礎。
+
+       注意這檢查的是「計畫自身的兩種表述是否一致」,不是券商成交結果。
+       部分成交/未成交由使用者在設定頁校正持有數,那是另一條既有的路徑。 */
+    var u0 = ctx.units || {}, inOrder = {};
+    plan.orders.forEach(function (o) {
+      inOrder[o.id] = true;
+      var moved = (plan.units[o.id] || 0) - (u0[o.id] || 0);
+      var want = o.side === "buy" ? o.shares : -o.shares;
+      if (moved !== want) {
+        bad.push("訂單與持股不符:" + o.id + " 訂單為 " + o.side + " " + o.shares
+          + " 股,但持股變動 " + moved + " 股");
+      }
+    });
+    live(ctx.inst).forEach(function (i) {
+      if (!inOrder[i.id] && (plan.units[i.id] || 0) !== (u0[i.id] || 0)) {
+        bad.push("無訂單卻變動持股:" + i.id + " " + (u0[i.id] || 0) + " → " + plan.units[i.id]);
+      }
+    });
+
+    /* 目標權重合計必須為 1(現金 + 各標的)。
+       這個檢查原本只寫在測試裡,沒有接進執行路徑。 */
+    if (plan.targetCash != null && !weightsSumToOne(ctx.inst, plan.targetCash)) {
+      bad.push("目標權重合計不為 1——請檢查各標的的目標權重");
+    }
+
     /* 減碼不得超過持股的 CAP。
        股數必須整數化,nu = floor(cur*(1-r)) 一律向下取整,
        因此實際賣出會略多於精算值——每檔最多多賣不到 1 股。
@@ -385,7 +459,7 @@
     priceTWD: priceTWD, valueTWD: valueTWD, totals: totals,
     tierTarget: tierTarget, advanceTier: advanceTier, computeState: computeState,
     validateSignal: validateSignal, derivedRisk: derivedRisk, riskAgrees: riskAgrees,
-    staleDays: staleDays,
+    validateImport: validateImport, staleDays: staleDays,
     makePlan: makePlan, checkInvariants: checkInvariants
   };
 });

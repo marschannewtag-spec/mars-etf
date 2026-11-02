@@ -106,8 +106,14 @@ describe("不變量 · 權重", () => {
     for (let k = 0; k < 500; k++) {
       const { ctx, prior } = randomScenario(rand);
       if (!E.live(ctx.inst).length) continue;
-      /* 全部 tgt 皆為 0 時退回預設分母,合計不會是 1,這是刻意的保護 */
-      if (E.live(ctx.inst).every(i => !i.tgt)) continue;
+      /* 原本這裡直接跳過「全部 tgt 皆為 0」並稱之為刻意的保護——
+         但那個情況其實會讓引擎建議清倉,而所有不變量都通過。
+         現在它由 makePlan 擋下,所以改成斷言它確實被擋,不再跳過。 */
+      if (E.live(ctx.inst).every(i => !i.tgt)) {
+        const plan = E.makePlan(ctx, E.computeState(ctx, prior));
+        a.strictEqual(plan.kind, "hold", `第 ${k} 個情境:權重全 0 必須擋下而非給建議`);
+        continue;
+      }
       a.ok(E.weightsSumToOne(ctx.inst, prior.tierTc),
         `第 ${k} 個情境權重合計不為 1(tc=${prior.tierTc})`);
     }

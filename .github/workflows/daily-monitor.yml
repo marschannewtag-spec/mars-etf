@@ -67,12 +67,11 @@ jobs:
             echo "重跑:\`node test/run.js\`"
           } > /tmp/selftest-issue.md
           TITLE="引擎測試失敗,監控暫停"
-          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          EXISTING=$(gh issue list --state open --limit 100 --json number,title \
+                       | jq -r --arg t "$TITLE" '[.[] | select(.title | endswith($t))][0].number // empty')
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --body-file /tmp/selftest-issue.md
           else
-            gh issue create --title "[$(date -u -d '+8 hours' '+%Y-%m-%d %H:%M')] $TITLE" \
-              --body-file /tmp/selftest-issue.md --label 監控 || \
             gh issue create --title "[$(date -u -d '+8 hours' '+%Y-%m-%d %H:%M')] $TITLE" \
               --body-file /tmp/selftest-issue.md
           fi
@@ -95,7 +94,6 @@ jobs:
         id: result
         run: |
           echo "alerts=$(jq '.alerts | length' monitor/result.json)" >> "$GITHUB_OUTPUT"
-          echo "first=$(jq -r '.firstRun' monitor/result.json)" >> "$GITHUB_OUTPUT"
 
       - name: 發出通知
         if: steps.result.outputs.alerts != '0'
@@ -124,15 +122,20 @@ jobs:
             echo "> 自動化永不下單。"
           } > /tmp/body.md
 
-          # 同標題的未關閉 Issue 已存在就補一則留言,不重複開
-          EXISTING=$(gh issue list --label 監控 --state open \
-                       --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          # 同標題的未關閉 Issue 已存在就補一則留言,不重複開。
+          #
+          # 原本這裡用 `--label 監控` 篩,但這個 repo 沒有該標籤:建立時 --label 失敗、
+          # 靠 `||` 備援開成,實際 Issue 的標籤欄是空的,於是篩選永遠找不到東西,
+          # 每則警報都開一個新 Issue。標籤整個移除,不再需要備援那行。
+          #
+          # 也不用 GitHub 的全文搜尋:標題含中文與 emoji,搜尋索引的匹配行為不可靠。
+          # 直接取回未關閉清單用 jq 比對標題結尾(標題前面是 "[日期] ")。
+          EXISTING=$(gh issue list --state open --limit 100 --json number,title \
+                       | jq -r --arg t "$TITLE" '[.[] | select(.title | endswith($t))][0].number // empty')
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --body-file /tmp/body.md
             echo "已於 Issue #$EXISTING 補充留言"
           else
-            gh issue create --title "[$DATE] $TITLE" \
-              --body-file /tmp/body.md --label 監控 || \
             gh issue create --title "[$DATE] $TITLE" --body-file /tmp/body.md
             echo "已開立新 Issue($COUNT 則警報)"
           fi

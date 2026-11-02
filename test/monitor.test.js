@@ -282,3 +282,69 @@ describe("監控 · 多重警報", () => {
     a.ok(l.includes("stale") && l.includes("mismatch"), "得到:" + l.join(","));
   });
 });
+
+describe("監控 · 通知必須真的送達(去重與靜默失效)", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const root = path.join(__dirname, "..");
+  const src = fs.readFileSync(path.join(root, "monitor", "check.js"), "utf8");
+  const wf = fs.readFileSync(path.join(root, ".github", "workflows", "daily-monitor.yml"), "utf8");
+  /* 註解裡會提到這些修掉的寫法作為說明,比對前先剝掉註解 */
+  const wfCode = wf.split("\n").filter(l => !/^\s*#/.test(l)).join("\n");
+
+  /* 這個 repo 沒有「監控」這個標籤(已查 API:兩則真實 Issue 的標籤欄都是 [])。
+     用它來篩就等於永遠找不到舊 Issue,每則警報都開新的一則。 */
+  it("去重不得依賴不存在的標籤", (a) => {
+    a.ok(!/--label\s*監控/.test(wfCode),
+      "workflow 不得再用 --label 監控:這個 repo 沒有該標籤,篩選永遠落空");
+  });
+
+  it("去重不得依賴 GitHub 全文搜尋(標題含中文與 emoji)", (a) => {
+    a.ok(!/--search\s+"\$TITLE in:title"/.test(wfCode),
+      "改用取回清單後本地比對,不靠搜尋索引");
+    a.match(wfCode, /endswith\(\$t\)/, "應以標題結尾比對(標題前面是 [日期] )");
+  });
+
+  /* 過期天數每天加一。標題含天數就等於標題每天不同,去重永遠對不上:
+     上游停更七天會開七個 Issue,使用者從此忽略通知。 */
+  it("過期警報的標題不得含天數", (a) => {
+    const long = Object.assign({}, sig(), { asof: { spx: "2026-07-20" } });
+    const titles = ["2026-08-06", "2026-08-10", "2026-08-20"].map(d => {
+      const r = evaluate(null, { at: d + " 16:00", ok: true, signal: long, fx: 32.2 }, d);
+      const s = r.alerts.find(x => x.level === "stale");
+      return s && s.title;
+    });
+    a.ok(titles.every(Boolean), "三個日期都該觸發過期警報:" + JSON.stringify(titles));
+    a.strictEqual(new Set(titles).size, 1,
+      "不同天數必須產生相同標題,否則去重失效:" + JSON.stringify(titles));
+    a.ok(!/\d/.test(titles[0]), "標題不該含數字:" + titles[0]);
+    const detail = evaluate(null, { at: "2026-08-20 16:00", ok: true, signal: long, fx: 32.2 }, "2026-08-20")
+      .alerts.find(x => x.level === "stale").detail;
+    a.match(detail, /已過期 \d+ 天/, "天數要在內文,不能就這樣消失");
+  });
+
+  /* 心跳讀取失敗若被當成「首次執行」,翻轉判斷 `if (prev && ...)` 不會比對,
+     於是風險旗標翻轉完全靜默——最該通知的那一則反而不見。 */
+  it("prev 為空時翻轉類警報確實不會發出(所以讀取失敗不可當成首次執行)", (a) => {
+    const flipped = sig({ risk_flag: true, spx: { last: 5200, sma12m: 7089, below: true }, vix: { last: 48, above: true } });
+    a.ok(!levels(evaluate(null, obs(flipped), TODAY)).includes("risk-on"),
+      "這是既有行為:沒有前次狀態就不報翻轉");
+    const armed = sig({ tripwire: { brent: 101, usdinr: 96.5, armed: true } });
+    a.ok(!levels(evaluate(null, obs(armed), TODAY)).includes("tripwire"),
+      "扳機翻轉同理");
+  });
+
+  it("心跳只在檔案不存在時才算首次執行,損毀必須拋錯", (a) => {
+    a.match(src, /e\.code !== "ENOENT"/,
+      "讀取失敗不可一律吞掉:損毀的心跳會讓風險旗標翻轉靜默");
+    a.ok(!/catch \(e\) \{ \/\* 首次執行 \*\/ \}/.test(src), "舊的靜默寫法必須移除");
+  });
+
+  it("workflow 不得保留沒人讀的 output", (a) => {
+    const declared = [...wf.matchAll(/echo "([a-z]+)=.*>> "\$GITHUB_OUTPUT"/g)].map(m => m[1]);
+    declared.forEach(name => {
+      a.match(wf, new RegExp("outputs\." + name),
+        `output ${name} 有宣告卻沒有任何步驟讀取`);
+    });
+  });
+});

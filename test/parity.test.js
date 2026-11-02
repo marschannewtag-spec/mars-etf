@@ -115,11 +115,25 @@ describe("平價 · 共用引擎 vs 重構前 PWA(commit 4916c0a)", () => {
 
   it(`${N} 個隨機情境:決策(持股/現金/訂單)完全一致`, (a) => {
     const rand = rng(20260806);
-    let holds = 0, trims = 0, rebals = 0;
+    let holds = 0, trims = 0, rebals = 0, zeroWeight = 0;
     for (let k = 0; k < N; k++) {
       const sc = randomScenario(rand);
       const { st, plan: planL } = legacyPlan(L, sc);
       const ctx = { inst: sc.inst, units: sc.units, prem: sc.prem, prices: sc.prices, fx: sc.fx, cashTWD: sc.cashTWD, cashUSD: sc.cashUSD };
+
+      /* 具名的刻意分歧(4000 個情境裡 12 個,0.30%)。
+         參照實作的 INV() 在權重全為 0 時退回 0.8,於是每檔目標都算成 0,
+         結果是「建議清倉 100% 現金」且所有不變量都通過。那是 bug,不是規格,
+         所以新版改為 hold。這裡不比對參照,而是斷言新版確實擋下來——
+         絕不為了讓平價變綠而重建凍結參照。 */
+      if (E.live(sc.inst).length && !(E.weightSum(sc.inst) > 0)) {
+        const blocked = E.makePlan(ctx, st);
+        a.strictEqual(blocked.kind, "hold", `第 ${k} 個情境:權重全 0 應被擋下`);
+        a.match(blocked.message, /目標權重合計為 0/, `第 ${k} 個情境:擋下的理由應說明權重為 0`);
+        zeroWeight++;
+        continue;
+      }
+
       const planN = E.makePlan(ctx, st);
 
       const nl = normalizeLegacy(planL), nn = normalizeNew(planN);
@@ -173,13 +187,21 @@ describe("平價 · 共用引擎 vs 重構前 PWA(commit 4916c0a)", () => {
     });
   });
 
-  it("有效標的篩選與權重總和與參照一致", (a) => {
+  it("有效標的篩選與權重總和與參照一致(權重全 0 時刻意分歧)", (a) => {
     const rand = rng(1234);
     for (let k = 0; k < 1000; k++) {
       const sc = randomScenario(rand);
       L.INST.length = 0; sc.inst.forEach(i => L.INST.push(i));
       a.strictEqual(E.live(sc.inst).length, L.LIVE().length, `第 ${k} 個情境有效標的數不一致`);
-      a.strictEqual(E.weightSum(sc.inst), L.INV(), `第 ${k} 個情境權重總和不一致`);
+
+      const sum = E.weightSum(sc.inst);
+      if (sum > 0) {
+        a.strictEqual(sum, L.INV(), `第 ${k} 個情境權重總和不一致`);
+      } else {
+        /* 刻意分歧:參照退回 0.8 來避免除以零,新版誠實回傳 0 並由呼叫端擋下 */
+        a.strictEqual(sum, 0, `第 ${k} 個情境:權重全 0 時應回傳 0`);
+        a.strictEqual(L.INV(), 0.8, `第 ${k} 個情境:參照應回傳舊的預設分母 0.8`);
+      }
     }
   });
 });

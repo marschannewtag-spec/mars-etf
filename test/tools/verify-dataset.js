@@ -12,10 +12,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const html = fs.readFileSync(path.join(__dirname, "..", "..", "index.html"), "utf8");
-const m = html.match(/const D_RETS=\[([^\]]+)\]/);
-if (!m) { console.error("找不到 D_RETS"); process.exit(1); }
-const R = m[1].split(",").map(Number);
+const R = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "data", "d_rets.json"), "utf8"));
 
 /* 註解宣稱 1990-07~2026-07 共 432 筆。1990-07 到 2026-07 相隔 432 個月,
    含頭含尾應為 433 筆,故此處以 index 0 = 1990-07、index 431 = 2026-06 解讀。 */

@@ -31,6 +31,7 @@
      REARM  回補遲滯:回升需超過門檻 + REARM 才鬆綁,避免在門檻上來回跳
      VIX_THRESHOLD / SMA_MONTHS 風險旗標的判定條件,
        與 Worker 的 /signal 一致,用於獨立複核伺服器端的判斷
+     TRIP_BRENT / TRIP_USDINR 00653L 出場扳機的兩個門檻,同樣用於複核
   ─────────────────────────────────────────────────────────────────── */
   var PARAMS = {
     BASE: 0.20,
@@ -44,6 +45,11 @@
     REARM: 0.05,
     VIX_THRESHOLD: 32,
     SMA_MONTHS: 12,
+    /* 00653L 扳機門檻。權威計算在 Worker(原始碼不在本 repo),
+       這裡放一份是為了讓三個顯示處不再各自寫死數字;
+       兩邊是否一致由 contract.test.js 以 tripwireArmed 複核,不一致即紅燈。 */
+    TRIP_BRENT: 90,
+    TRIP_USDINR: 96,
     /* 再平衡下單門檻:變動金額低於總值這個比例就不動(避免碎單) */
     MIN_TRADE_FRACTION: 0.005,
     /* 現金偏離判定時給的容差,對應 makePlan 的 cf < DEF - EPS */
@@ -67,16 +73,29 @@
   /**
    * 目標權重總和。標的的 tgt 是「相對權重」,實際目標需除以此總和正規化。
    * 空白列不計入——否則真實標的會被等比稀釋,等於有資金被永遠買不到的標的佔住。
+   *
+   * 可能回傳 0(全部權重為 0)。呼叫端必須先擋下,不可直接當分母——
+   * 原本這裡退回預設值 0.8 以免除以零,但那只是讓每檔目標都算成 0,
+   * 結果是「建議清倉」且所有不變量都通過。掩蓋錯誤比爆掉更危險。
    */
   function weightSum(inst) {
     var t = 0;
     live(inst).forEach(function (i) { t += (+i.tgt || 0); });
-    return t || 0.8;
+    return t;
   }
 
   /** 單一標的的目標權重(佔總資產),已扣除現金水位並正規化 */
   function targetWeight(i, tc, inst) {
     return (1 - tc) * (+i.tgt || 0) / weightSum(inst);
+  }
+
+  /**
+   * 權重是否超出容忍帶。makePlan 的動作判定與 PWA 持倉卡的 ⚠ 標記
+   * 必須是同一條規則——原本兩邊各寫一次,改 DRIFT 只會改到一邊。
+   */
+  function offBand(w, tg, P) {
+    P = P || PARAMS;
+    return Math.abs(w - tg) > P.DRIFT * tg;
   }
 
   /* ── 估值 ─────────────────────────────────────────────────────── */
@@ -173,11 +192,104 @@
     return !!s.risk_flag === d;
   }
 
+  /**
+   * 由原始油價與匯率獨立重算 00653L 扳機,不看 s.tripwire.armed。
+   * 回傳 null 代表資料不足以判斷。與 derivedRisk 同一個用途:
+   * 門檻搬進 PARAMS 之後,必須有人盯著 Worker 有沒有跟著一致。
+   */
+  function tripwireArmed(s, P) {
+    P = P || PARAMS;
+    var t = s && s.tripwire;
+    if (!t || !numOk(t.brent) || !numOk(t.usdinr)) return null;
+    return +t.brent > P.TRIP_BRENT && +t.usdinr > P.TRIP_USDINR;
+  }
+
+  /**
+   * 驗證匯入的狀態檔。回傳 null 代表通過,否則回傳拒絕原因字串。
+   *
+   * 匯入是這個 App 唯一的不信任輸入——它整份覆蓋 localStorage。
+   * 刻意「拒絕」而非「自動夾取」:悄悄把 -500 股修成 0,會讓一份損壞的備份
+   * 繼續產生看起來正常的投資建議,使用者永遠不知道資料壞過。
+   * 實測負股數會造出 -70% 的假回撤,觸發分層抄底最深一格,並寫進峰值永久污染。
+   *
+   * (設定頁即時輸入的數字由 readUI 夾取,那是當下的輸入,不是損壞的檔案。)
+   */
+  function validateImport(o) {
+    if (!o || typeof o !== "object" || Array.isArray(o)) return "最外層必須是一個物件";
+    if (o.units != null) {
+      if (typeof o.units !== "object" || Array.isArray(o.units)) return "units 必須是物件";
+      for (var k in o.units) {
+        if (!Number.isInteger(o.units[k]) || o.units[k] < 0) {
+          return "持股必須是非負整數:" + k + " = " + o.units[k];
+        }
+      }
+    }
+    var nonNeg = ["peak", "cashTWD", "cashUSD", "cap"];
+    for (var n = 0; n < nonNeg.length; n++) {
+      var v = o[nonNeg[n]];
+      if (v != null && !(Number.isFinite(v) && v >= 0)) return nonNeg[n] + " 必須是非負數:" + v;
+    }
+    if (o.tierTc != null) {
+      var lo = PARAMS.LADDER.reduce(function (m, a) { return Math.min(m, a[1]); }, PARAMS.BASE);
+      var hi = Math.max(PARAMS.BASE, PARAMS.DEF);
+      if (!(Number.isFinite(o.tierTc) && o.tierTc >= lo && o.tierTc <= hi)) {
+        return "tierTc 必須落在 [" + lo + ", " + hi + "]:" + o.tierTc;
+      }
+    }
+    return null;
+  }
+
   /** 市場資料延遲天數。today 為 YYYY-MM-DD 字串 */
   function staleDays(s, today) {
     if (!s || !s.asof || !s.asof.spx) return Infinity;
     var d = Math.floor((Date.parse(today) - Date.parse(s.asof.spx)) / 864e5);
     return Number.isFinite(d) ? d : Infinity;
+  }
+
+  /**
+   * 月檢閘門:回傳中止原因清單(空陣列 = 可繼續)。
+   *
+   * 這是規格裡「任一觸發即中止,且不更新峰值與分層狀態」的那份清單。
+   * 它原本只存在於 index.html 的 runCheck 裡,是決策邏輯卻零測試覆蓋。
+   * 回傳純文字,跳脫交給呈現層——標的代碼可由匯入檔控制,必須跳脫。
+   *
+   * @param ctx    {inst, prices, fx}
+   * @param signal Worker /signal 回應
+   * @param today  YYYY-MM-DD(台北)
+   */
+  function gateReasons(ctx, signal, today, P) {
+    P = P || PARAMS;
+    var out = [], list = live(ctx.inst);
+    var sigErr = validateSignal(signal);
+    if (sigErr) out.push("市場訊號無效:" + sigErr);
+    if (!list.length) out.push("尚未設定任何標的(請至設定頁填入代碼)");
+    var missing = list.filter(function (i) {
+      return !isPos(ctx.prices ? ctx.prices[i.id] : null);
+    }).map(function (i) { return i.id; });
+    if (missing.length) out.push("報價缺失:" + missing.join("、"));
+    var stale = staleDays(signal, today);
+    if (stale > P.STALE) {
+      out.push(Number.isFinite(stale)
+        ? "市場資料過期 " + stale + " 天(asof " + signal.asof.spx + ")"
+        : "市場資料沒有日期,無法判斷是否過期");
+    }
+    if (!isPos(ctx.fx)) out.push("匯率無效");
+    return out;
+  }
+
+  /**
+   * 「一鍵套用持倉」後該記錄的台幣現金:計畫現金扣掉美元現金的台幣值。
+   *
+   * 回傳 null 代表算不出來——美元現金的台幣值超過整份計畫的現金,
+   * 代表設定頁的現金欄位與實際不符。原本外層包 Math.max(0, ...),
+   * 這種情形會被無聲歸零:總資產憑空蒸發,而且會寫進峰值污染之後的回撤。
+   *
+   * 千元粒度是刻意的,與設定頁以萬元為單位的輸入欄一致。
+   */
+  function cashTWDAfter(planCash, cashUSD, fx) {
+    var twd = planCash - (cashUSD || 0) * (isPos(fx) ? fx : 0);
+    if (!(twd >= 0)) return null;
+    return Math.round(twd / 1000) * 1000;
   }
 
   /* ── 狀態 ─────────────────────────────────────────────────────── */
@@ -235,6 +347,12 @@
     var units0 = ctx.units || {}, prem = ctx.prem || {};
     var list = live(ctx.inst);
 
+    /* 權重合計為 0 無法推算配置。不可讓它往下跑——見 weightSum 的註解。
+       「沒有任何標的」是另一回事(呼叫端的閘門會先擋),行為維持原樣。 */
+    if (list.length && !(weightSum(ctx.inst) > 0)) {
+      return { kind: "hold", message: "各標的的目標權重合計為 0——請至設定頁填入目標權重。本期不產生任何建議" };
+    }
+
     /* ── 風險期:凍結投入,只允許減碼 ── */
     if (st.risk) {
       if (cf < P.DEF - P.CASH_EPS) {
@@ -269,7 +387,7 @@
       var v = valueTWD(i, units0, ctx.prices, ctx.fx);
       if (v == null) return;
       var w = v / V, tg = targetWeight(i, tc, ctx.inst);
-      if (Math.abs(w - tg) > P.DRIFT * tg) act = true;
+      if (offBand(w, tg, P)) act = true;
     });
     if (!act) {
       return { kind: "hold", message: "全部在容忍帶內——本月無動作。論點檢核:逐檔確認否證條件未觸發即續抱" };
@@ -351,6 +469,37 @@
       bad.push("風險期出現買單——凍結投入規格被違反");
     }
 
+    /* 訂單與持股必須自洽。
+       計畫裡有兩份資料:orders 是使用者拿去券商執行的,units 是 App 事後記錄的。
+       原本只驗 units,於是訂單方向反轉、股數爆增都能通行——而人照著訂單下單。
+       兩者分歧會讓實際部位與紀錄無聲走偏,下個月的計算又以錯的紀錄為基礎。
+
+       注意這檢查的是「計畫自身的兩種表述是否一致」,不是券商成交結果。
+       部分成交/未成交由使用者在設定頁校正持有數,那是另一條既有的路徑。 */
+    var u0 = ctx.units || {}, inOrder = {};
+    plan.orders.forEach(function (o) {
+      inOrder[o.id] = true;
+      var moved = (plan.units[o.id] || 0) - (u0[o.id] || 0);
+      var want = o.side === "buy" ? o.shares : -o.shares;
+      if (moved !== want) {
+        bad.push("訂單與持股不符:" + o.id + " 訂單為 " + o.side + " " + o.shares
+          + " 股,但持股變動 " + moved + " 股");
+      }
+    });
+    live(ctx.inst).forEach(function (i) {
+      if (!inOrder[i.id] && (plan.units[i.id] || 0) !== (u0[i.id] || 0)) {
+        bad.push("無訂單卻變動持股:" + i.id + " " + (u0[i.id] || 0) + " → " + plan.units[i.id]);
+      }
+    });
+
+    /* 這裡刻意沒有「權重合計為 1」的檢查。
+       weightsSumToOne 看似是一道防線,實際上是恆真式:
+         Σ targetWeight = (1-tc) * Σtgt/Σtgt = 1-tc,加上 tc 恆為 1。
+       唯一會是 false 的情況是 Σtgt = 0(含正負互相抵銷)導致 NaN,
+       而那個情況 makePlan 開頭的閘門已經擋掉了。
+       接進來只會多一行永遠不會觸發的程式碼——突變測試證實移除它不會讓任何測試變紅。
+       它留在 invariant.test.js 當作「正規化後合計為 1」這個性質的可讀斷言。 */
+
     /* 減碼不得超過持股的 CAP。
        股數必須整數化,nu = floor(cur*(1-r)) 一律向下取整,
        因此實際賣出會略多於精算值——每檔最多多賣不到 1 股。
@@ -382,10 +531,12 @@
     PARAMS: PARAMS,
     isPos: isPos, numOk: numOk, hasId: hasId, live: live,
     weightSum: weightSum, targetWeight: targetWeight, weightsSumToOne: weightsSumToOne,
+    offBand: offBand,
     priceTWD: priceTWD, valueTWD: valueTWD, totals: totals,
     tierTarget: tierTarget, advanceTier: advanceTier, computeState: computeState,
     validateSignal: validateSignal, derivedRisk: derivedRisk, riskAgrees: riskAgrees,
-    staleDays: staleDays,
+    validateImport: validateImport, staleDays: staleDays,
+    tripwireArmed: tripwireArmed, gateReasons: gateReasons, cashTWDAfter: cashTWDAfter,
     makePlan: makePlan, checkInvariants: checkInvariants
   };
 });

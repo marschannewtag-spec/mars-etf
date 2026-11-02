@@ -13,8 +13,8 @@ const { describe, it } = require("./harness.js");
 const fs = require("fs");
 const path = require("path");
 
-const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
-const R = html.match(/const D_RETS=\[([^\]]+)\]/)[1].split(",").map(Number);
+/* 原本用正規表示式從 index.html 挖出 D_RETS——格式稍動就斷。資料已搬到 data/。 */
+const R = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "d_rets.json"), "utf8"));
 
 /* 註解宣稱 1990-07~2026-07 共 432 筆。相隔 432 個月、含頭含尾應為 433 筆,
    故以 index 0 = 1990-07、index 431 = 2026-06 解讀。 */

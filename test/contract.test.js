@@ -84,8 +84,10 @@ describe("資料契約 · /signal", () => {
     a.strictEqual(typeof sig.tripwire.armed, "boolean");
     a.ok(+sig.tripwire.brent > 10 && +sig.tripwire.brent < 300, `Brent ${sig.tripwire.brent} 超出合理範圍`);
     a.ok(+sig.tripwire.usdinr > 30 && +sig.tripwire.usdinr < 200, `USDINR ${sig.tripwire.usdinr} 超出合理範圍`);
-    a.strictEqual(sig.tripwire.armed, +sig.tripwire.brent > 90 && +sig.tripwire.usdinr > 96,
-      "armed 與 Brent>90 且 INR>96 的條件不自洽");
+    /* 門檻搬進 PARAMS 之後,Worker 那份(原始碼不在本 repo)可能悄悄跟著漂。
+       用 engine.js 獨立重算複核,不一致就是某一邊改了——與 risk_flag 同一種守法。 */
+    a.strictEqual(sig.tripwire.armed, E.tripwireArmed(sig),
+      `armed=${sig.tripwire.armed} 與 Brent>${E.PARAMS.TRIP_BRENT} 且 INR>${E.PARAMS.TRIP_USDINR} 的重算不一致`);
   });
 });
 

@@ -7,7 +7,7 @@
  */
 "use strict";
 const { describe, it } = require("./harness.js");
-const { evaluate } = require("../monitor/check.js");
+const { evaluate, weeklyAlive, TRIPWIRE_TITLE } = require("../monitor/check.js");
 const E = require("../engine/engine.js");
 
 const TODAY = "2026-08-06";
@@ -23,6 +23,14 @@ function sig(over) {
 }
 const obs = (s, fx) => ({ at: "2026-08-06 16:00", ok: true, signal: s, fx: fx === undefined ? 32.28 : fx });
 const levels = r => r.alerts.map(a => a.level);
+
+const FS = require("fs");
+const PATH = require("path");
+const ROOT = PATH.join(__dirname, "..");
+const src = FS.readFileSync(PATH.join(ROOT, "monitor", "check.js"), "utf8");
+/* 註解裡會提到那些已修掉的寫法作為說明,比對前先剝掉註解行 */
+const wfCode = FS.readFileSync(PATH.join(ROOT, ".github", "workflows", "daily-monitor.yml"), "utf8")
+  .split(/\r?\n/).filter(l => !/^\s*#/.test(l)).join("\n");
 
 describe("監控 · 風險旗標翻轉", () => {
   it("平靜 → 平靜:靜默", (a) => {
@@ -131,10 +139,43 @@ describe("監控 · 00653L 扳機", () => {
     a.ok(!levels(evaluate(prev, obs(armed), TODAY)).includes("tripwire"));
   });
 
-  it("觸發 → 解除:通知", (a) => {
+  it("觸發 → 解除:不開新 Issue,改成關閉觸發那則", (a) => {
+    /* 原本解除會再開一則 Issue,於是列表永遠留著一對開著的 Issue,
+       而「要不要出場」那個裁決從來沒被記錄。新警報會藏在那堆雜訊裡。 */
     const armed = sig({ tripwire: { brent: 92.1, usdinr: 96.8, armed: true } });
     const prev = evaluate(null, obs(armed), TODAY).state;
-    a.ok(levels(evaluate(prev, obs(sig()), TODAY)).includes("tripwire-off"));
+    const r = evaluate(prev, obs(sig()), TODAY);
+    a.deepStrictEqual(levels(r), [], "解除不該產生任何警報");
+    a.strictEqual(r.closes.length, 1, "應該要關掉一則");
+    a.strictEqual(r.closes[0].title, TRIPWIRE_TITLE,
+      "標題必須與觸發那則完全相同,否則 workflow 找不回來");
+    a.match(r.closes[0].detail, /不再同時滿足/);
+  });
+
+  it("觸發與解除指向同一個標題", (a) => {
+    const armed = sig({ tripwire: { brent: 92.1, usdinr: 96.8, armed: true } });
+    const on = evaluate(evaluate(null, obs(sig()), TODAY).state, obs(armed), TODAY);
+    const off = evaluate(evaluate(null, obs(armed), TODAY).state, obs(sig()), TODAY);
+    a.strictEqual(on.alerts.find(x => x.level === "tripwire").title, off.closes[0].title);
+  });
+
+  it("其他情況 closes 一律為空", (a) => {
+    /* 拿不到資料就亂關 Issue,等於在最需要那則通知的時候把它關掉。 */
+    const prev = evaluate(null, obs(sig()), TODAY).state;
+    a.deepStrictEqual(evaluate(prev, obs(sig()), TODAY).closes, []);
+    a.deepStrictEqual(evaluate(null, { at: "x", ok: false, error: "斷線" }, TODAY).closes, [],
+      "Worker 掛了不可亂關");
+    a.deepStrictEqual(evaluate(prev, obs({ spx: { last: 1, sma12m: 1 } }), TODAY).closes, [],
+      "訊號破損不可亂關");
+  });
+
+  it("門檻由 PARAMS 帶出,通知文字不得寫死", (a) => {
+    const armed = sig({ tripwire: { brent: 92.1, usdinr: 96.8, armed: true } });
+    const d = evaluate(evaluate(null, obs(sig()), TODAY).state, obs(armed), TODAY)
+      .alerts.find(x => x.level === "tripwire").detail;
+    a.match(d, new RegExp("> " + E.PARAMS.TRIP_BRENT + " "));
+    a.match(d, new RegExp("> " + E.PARAMS.TRIP_USDINR + ","));
+    a.ok(!/> 90 /.test(src) && !/> 96/.test(src), "原始碼不得再出現裸門檻");
   });
 });
 
@@ -280,5 +321,147 @@ describe("監控 · 多重警報", () => {
     const bad = sig({ asof: { spx: "2026-07-01" }, risk_flag: false, spx: { last: 5200, sma12m: 7089, below: true } });
     const l = levels(evaluate(prev, obs(bad), TODAY));
     a.ok(l.includes("stale") && l.includes("mismatch"), "得到:" + l.join(","));
+  });
+});
+
+describe("監控 · 通知必須真的送達(去重與靜默失效)", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const root = path.join(__dirname, "..");
+  const src = fs.readFileSync(path.join(root, "monitor", "check.js"), "utf8");
+  const wf = fs.readFileSync(path.join(root, ".github", "workflows", "daily-monitor.yml"), "utf8");
+  /* 註解裡會提到這些修掉的寫法作為說明,比對前先剝掉註解 */
+  const wfCode = wf.split("\n").filter(l => !/^\s*#/.test(l)).join("\n");
+
+  /* 這個 repo 沒有「監控」這個標籤(已查 API:兩則真實 Issue 的標籤欄都是 [])。
+     用它來篩就等於永遠找不到舊 Issue,每則警報都開新的一則。 */
+  it("去重不得依賴不存在的標籤", (a) => {
+    a.ok(!/--label\s*監控/.test(wfCode),
+      "workflow 不得再用 --label 監控:這個 repo 沒有該標籤,篩選永遠落空");
+  });
+
+  it("去重不得依賴 GitHub 全文搜尋(標題含中文與 emoji)", (a) => {
+    a.ok(!/--search\s+"\$TITLE in:title"/.test(wfCode),
+      "改用取回清單後本地比對,不靠搜尋索引");
+    a.match(wfCode, /endswith\(\$t\)/, "應以標題結尾比對(標題前面是 [日期] )");
+  });
+
+  /* 過期天數每天加一。標題含天數就等於標題每天不同,去重永遠對不上:
+     上游停更七天會開七個 Issue,使用者從此忽略通知。 */
+  it("過期警報的標題不得含天數", (a) => {
+    const long = Object.assign({}, sig(), { asof: { spx: "2026-07-20" } });
+    const titles = ["2026-08-06", "2026-08-10", "2026-08-20"].map(d => {
+      const r = evaluate(null, { at: d + " 16:00", ok: true, signal: long, fx: 32.2 }, d);
+      const s = r.alerts.find(x => x.level === "stale");
+      return s && s.title;
+    });
+    a.ok(titles.every(Boolean), "三個日期都該觸發過期警報:" + JSON.stringify(titles));
+    a.strictEqual(new Set(titles).size, 1,
+      "不同天數必須產生相同標題,否則去重失效:" + JSON.stringify(titles));
+    a.ok(!/\d/.test(titles[0]), "標題不該含數字:" + titles[0]);
+    const detail = evaluate(null, { at: "2026-08-20 16:00", ok: true, signal: long, fx: 32.2 }, "2026-08-20")
+      .alerts.find(x => x.level === "stale").detail;
+    a.match(detail, /已過期 \d+ 天/, "天數要在內文,不能就這樣消失");
+  });
+
+  /* 心跳讀取失敗若被當成「首次執行」,翻轉判斷 `if (prev && ...)` 不會比對,
+     於是風險旗標翻轉完全靜默——最該通知的那一則反而不見。 */
+  it("prev 為空時翻轉類警報確實不會發出(所以讀取失敗不可當成首次執行)", (a) => {
+    const flipped = sig({ risk_flag: true, spx: { last: 5200, sma12m: 7089, below: true }, vix: { last: 48, above: true } });
+    a.ok(!levels(evaluate(null, obs(flipped), TODAY)).includes("risk-on"),
+      "這是既有行為:沒有前次狀態就不報翻轉");
+    const armed = sig({ tripwire: { brent: 101, usdinr: 96.5, armed: true } });
+    a.ok(!levels(evaluate(null, obs(armed), TODAY)).includes("tripwire"),
+      "扳機翻轉同理");
+  });
+
+  it("心跳只在檔案不存在時才算首次執行,損毀必須拋錯", (a) => {
+    a.match(src, /e\.code !== "ENOENT"/,
+      "讀取失敗不可一律吞掉:損毀的心跳會讓風險旗標翻轉靜默");
+    a.ok(!/catch \(e\) \{ \/\* 首次執行 \*\/ \}/.test(src), "舊的靜默寫法必須移除");
+  });
+
+  it("workflow 不得保留沒人讀的 output", (a) => {
+    const declared = [...wf.matchAll(/echo "([a-z]+)=.*>> "\$GITHUB_OUTPUT"/g)].map(m => m[1]);
+    declared.forEach(name => {
+      a.match(wf, new RegExp("outputs\." + name),
+        `output ${name} 有宣告卻沒有任何步驟讀取`);
+    });
+  });
+});
+
+describe("監控 · 死人開關(每週存活回報)", () => {
+  /* 平常完全靜默,所以「沒收到通知」同時代表「一切正常」與「排程已經死了」,
+     從通知本身分不出來。我自己在稽核時就誤判過一次:本地心跳停在兩個月前,
+     一度認定監控死了,查 API 才發現是本地副本落後。這一則就是用來分開那兩種狀態。 */
+  const state = evaluate(null, obs(sig()), TODAY).state;
+  const FRI = "2026-11-06", MON = "2026-11-02";
+
+  it("週五且無警報才發", (a) => {
+    a.ok(weeklyAlive([], FRI, false, state), "週五無警報:要發");
+    a.strictEqual(weeklyAlive([], MON, false, state), null, "非週五:不發");
+  });
+
+  it("有真警報時不發", (a) => {
+    /* 那則警報本身就是存活證明;而且 workflow 以 alerts[0].title 當 Issue 標題,
+       存活回報若擠進去就會把真警報的標題蓋掉。 */
+    a.strictEqual(weeklyAlive([{ level: "risk-on", title: "🔴 風險期開始" }], FRI, false, state), null);
+  });
+
+  it("演練不發,否則演練會把當週的存活回報用掉", (a) => {
+    a.strictEqual(weeklyAlive([], FRI, true, state), null);
+  });
+
+  it("標題固定不變,否則每週開一個新 Issue", (a) => {
+    const t1 = weeklyAlive([], FRI, false, state).title;
+    const t2 = weeklyAlive([], "2026-11-13", false, state).title;
+    a.strictEqual(t1, t2, "去重靠標題,標題會變就等於沒有去重");
+    a.ok(!/\d/.test(t1), "標題不得含日期或數字:" + t1);
+  });
+
+  it("內文帶當下市場狀態,但不得帶持倉", (a) => {
+    const d = weeklyAlive([], FRI, false, state).detail;
+    a.match(d, /風險旗標/);
+    a.match(d, new RegExp(String(state.spxLast)));
+    ["units", "cashTWD", "cashUSD", "peak", "tierTc"].forEach(k =>
+      a.ok(!d.includes(k), "存活回報不得出現 " + k));
+  });
+
+  it("拿不到市場狀態時說清楚,不可印出 undefined", (a) => {
+    const d = weeklyAlive([], FRI, false, null).detail;
+    a.ok(!/undefined/.test(d), "得到:" + d);
+  });
+
+  it("main 確實把它接起來", (a) => {
+    /* 寫好卻沒接上,單元測試照樣全綠——weightsSumToOne 就是這樣躺了一輪。 */
+    a.match(src, /weeklyAlive\(alerts, taipeiToday\(\), DRILL, state\)/, "main 必須呼叫");
+    a.match(src, /if \(alive\) alerts\.push\(alive\)/, "回傳值必須真的進警報清單");
+  });
+});
+
+describe("監控 · workflow 的韌性", () => {
+  /* 實測 61 次排程:最快晚 19 分、中位晚 4 小時 56 分、最慢晚 11 小時 39 分,
+     43% 超過 6 小時。公開 repo 的排程是「有空才跑」,整點是最壅塞的槽位。 */
+  it("排程不得排在整點", (a) => {
+    const mins = [...wfCode.matchAll(/- cron: "(\S+) /g)].map(m => m[1]);
+    a.ok(mins.length, "找不到 cron 設定");
+    mins.forEach(m => a.notStrictEqual(m, "0", "分鐘不可為 0:整點是最壅塞的排程槽位"));
+  });
+
+  it("推送心跳前必須先拉取", (a) => {
+    /* 你在 bot checkout 之後 push 任何東西,bot 的 push 就會被拒、整個 job 紅掉,
+       而紅掉不會變成通知(通知步驟在它前面),當天的監控就靜靜失敗了。 */
+    const at = wfCode.indexOf("git push");
+    a.ok(at > 0, "找不到 git push");
+    a.match(wfCode.slice(0, at), /git pull --rebase/, "git push 之前必須先 pull --rebase");
+  });
+
+  it("條件解除走關閉舊 Issue,不是開新的", (a) => {
+    const from = wfCode.indexOf("outputs.closes");
+    const step = wfCode.slice(from, wfCode.indexOf("name: 發出通知"));
+    a.ok(from > 0 && step.length > 0, "找不到解除步驟");
+    a.match(step, /gh issue close/, "解除必須關掉觸發那則");
+    a.match(step, /endswith\(\$t\)/, "找回舊 Issue 要用同一套標題比對");
+    a.ok(!/gh issue create/.test(step), "解除不得開新 Issue");
   });
 });

@@ -790,6 +790,42 @@ describe("防線 · 券商庫存貼截圖", () => {
   });
 });
 
+describe("防線 · 一句話結論", () => {
+  /* 這一頁每個月只回答一個問題:「要不要動、動什麼」。
+     結論必須來自引擎的 plan.kind,不可由網頁自己重新判斷一次。 */
+  const run = () => {
+    const html = readHtml();
+    return html.slice(html.indexOf("async function runCheck"), html.indexOf('$("btnCheck").onclick'));
+  };
+
+  it("結論分得出減碼與再平衡,而且是讀引擎的 kind", (a) => {
+    const h = run();
+    a.match(h, /plan\.kind==="trim"/, "減碼與再平衡的措辭不同,判斷要讀引擎");
+    a.match(readHtml(), /kind:plan\.kind,/, "makePlan 必須把 kind 帶出來");
+    a.ok(!/st\.risk\?"風險期/.test(h), "不可在網頁自己重判一次風險期");
+  });
+
+  it("閘門沒過時必須講出「不下單」,不可只列原因", (a) => {
+    /* 原本只在清單裡列五道閘門,使用者得自己讀完才知道這個月沒有建議 */
+    const h = run();
+    const g = h.slice(h.indexOf("if(blockers.length)"));
+    a.match(g.slice(0, 400), /setVerdict\("本月不下單"/, "閘門擋下也要給結論");
+  });
+
+  it("訂單清單不再重複抬頭——抬頭已經是結論那一句", (a) => {
+    const h = run();
+    a.ok(!/"<div class='sug "\+\(plan\.headSide/.test(h),
+      "抬頭列已經搬進結論,清單裡不可再印一次");
+  });
+
+  it("第一次打開要告訴人下一步做什麼", (a) => {
+    /* 小白看到一堆 0 不知道要幹嘛;結論卡必須指出去哪裡填資料 */
+    const html = readHtml();
+    const boot = html.slice(html.indexOf("(async function()"));
+    a.match(boot, /setVerdict\("還沒有持股"/, "沒有持股時要給明確的下一步");
+  });
+});
+
 describe("防線 · 設定頁沒有的代碼", () => {
   /* 講不出來的後果不只是少一列:總值、權重、再平衡訂單全都建立在
      不完整的組合上,而畫面上沒有任何線索。 */

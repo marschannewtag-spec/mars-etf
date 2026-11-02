@@ -131,6 +131,63 @@
     return { inv: inv, cash: cash, V: inv + cash, miss: miss };
   }
 
+  /* ── OCR 代碼修補 ─────────────────────────────────────────────
+     截圖辨識把代碼結尾的 L 認成 1 的機率極高(00647L → 006471),而台股
+     槓桿 ETF 每一檔都以 L 結尾。代碼對不上的那一列不會進解析表,也不會
+     被列進 unknown——整列無聲消失,畫面上沒有任何線索,比認錯更糟。
+
+     修補規則刻意很窄,因為這是在決定「這一列的錢屬於哪一檔」:
+       1. 只比對設定頁裡實際存在的代碼(封閉集合,不是開放式猜測)
+       2. 長度必須相同,且只准差一個字元
+       3. 那個字元必須與目標字元同屬一個已知的互混群組
+       4. 符合條件的目標必須唯一;兩個都像就不改
+     修完仍要過 parseBrokerPaste 的「股數 × 現價 ≈ 市值」才會標成確定。
+
+     parseBrokerPaste 刻意不呼叫這個函式:打字打錯的 006471 不該被悄悄
+     改成 00647L。只有 OCR 的輸出才走這一條,由呼叫端決定。
+  ─────────────────────────────────────────────────────────────── */
+
+  /* 互混是雙向的:OCR 可能把 1 看成 l,也可能把 L 看成 1,所以用群組不用對照表 */
+  var OCR_GROUPS = ["1lI|L", "0OoDQ", "5S", "8B", "2Z", "6G", "9g"];
+
+  function sameOcrGroup(a, b) {
+    for (var i = 0; i < OCR_GROUPS.length; i++) {
+      if (OCR_GROUPS[i].indexOf(a) >= 0 && OCR_GROUPS[i].indexOf(b) >= 0) return true;
+    }
+    return false;
+  }
+
+  /**
+   * 把 OCR 文字裡「差一個易混字元就等於某個已設定代碼」的 token 修回去。
+   * @param text 辨識出來的整段文字
+   * @param inst 設定頁的標的清單
+   * @returns 修補後的文字(沒有命中就原樣回傳)
+   */
+  function fixOcrCodes(text, inst) {
+    var ids = (inst || []).map(function (i) { return String(i && i.id); })
+      .filter(function (x) { return /^[0-9A-Za-z]{3,10}$/.test(x); });
+    if (!ids.length) return String(text == null ? "" : text);
+    return String(text == null ? "" : text).replace(/[0-9A-Za-z|]{3,10}/g, function (tok) {
+      if (ids.indexOf(tok) >= 0) return tok;
+      var hit = null;
+      for (var n = 0; n < ids.length; n++) {
+        var id = ids[n];
+        if (id.length !== tok.length) continue;
+        var diff = -1, ok = true;
+        for (var k = 0; k < id.length; k++) {
+          if (tok[k] === id[k]) continue;
+          if (diff >= 0 || !sameOcrGroup(tok[k], id[k])) { ok = false; break; }
+          diff = k;
+        }
+        if (!ok || diff < 0) continue;
+        /* 兩個代碼都只差一個字元時無從選擇,寧可不改也不要改錯一檔 */
+        if (hit) return tok;
+        hit = id;
+      }
+      return hit || tok;
+    });
+  }
+
   /* ── 成本與損益 ───────────────────────────────────────────────
      cost 是「這一檔的總成本(台幣)」,與券商畫面的「平均成本」帳務模式一致。
      null 代表「不知道成本」——不知道就說不知道,不要用現價倒推一個假的。
@@ -735,7 +792,7 @@
 
   return {
     PARAMS: PARAMS,
-    isPos: isPos, hasId: hasId, live: live,
+    isPos: isPos, hasId: hasId, live: live, fixOcrCodes: fixOcrCodes,
     weightSum: weightSum, targetWeight: targetWeight, weightsSumToOne: weightsSumToOne,
     offBand: offBand,
     priceTWD: priceTWD, valueTWD: valueTWD, totals: totals,

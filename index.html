@@ -445,11 +445,15 @@ button.wide{width:100%}
     </div>
 
     <div class="sec-row">
-      <div class="lab"><b>從券商貼上庫存</b>把券商 App 的庫存畫面整段複製貼進來,會解析出股數與成本。解析結果一定要先確認才會寫入——認錯一個數字就會算出錯的下單清單。</div>
+      <div class="lab"><b>從券商貼上庫存</b>把券商 App 的庫存畫面整段複製貼進來,會解析出股數與成本。也可以直接貼截圖,在這台裝置上辨識成文字(第一次要下載約 5MB 的辨識引擎)。解析結果一定要先確認才會寫入——認錯一個數字就會算出錯的下單清單。</div>
       <div class="card">
-        <label for="pasteBox">券商庫存(整段貼上)</label>
-        <textarea id="pasteBox" rows="4" placeholder="例:某某正2 1,000 -5,000 現股 00xxxL 100,000 -4.76%"></textarea>
-        <div style="margin-top:14px"><button class="sec" id="btnParse">解析</button></div>
+        <label for="pasteBox">券商庫存(整段貼上,或直接貼截圖)</label>
+        <textarea id="pasteBox" rows="4" placeholder="例:某某正2 1,000 -5,000 現股 00xxxL 100,000 -4.76%&#10;也可以把截圖貼進來,或按下面的「選截圖」"></textarea>
+        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="sec" id="btnParse">解析</button>
+          <button class="sec" id="btnPickImg">選截圖</button>
+        </div>
+        <input type="file" id="imgFile" accept="image/*" hidden>
         <div id="pasteOut"></div>
       </div>
     </div>
@@ -915,6 +919,12 @@ $("btnMC").onclick=async function(){
 };
 let PARSED=null;
 $("btnParse").onclick=async function(){
+  /* 空白的框不是「找不到代碼」:貼圖片進 textarea 不會留下任何文字,
+     原本那句話等於在回答一段空字串,訊息沒說錯但完全沒幫到人。 */
+  if(!$("pasteBox").value.trim()){
+    $("pasteOut").innerHTML="<div class='sug hold'>上面的框是空的。貼上券商庫存的文字,"
+      +"或直接把截圖貼進來 / 按「選截圖」。</div>";return;
+  }
   /* 解析的安全機制是「股數 × 現價 ≈ 市值」。沒有報價就核對不了,每一列都會變成
      「需確認」——而新裝置還原資料正是最需要它的時候,所以先把價抓回來。 */
   if(LIVE().some(function(i){return !fin(Q.px[i.id])})){
@@ -942,6 +952,90 @@ $("btnParse").onclick=async function(){
     +"<div style='margin-top:14px'><button id='btnPasteApply'>確認無誤,套用</button></div>";
   $("btnPasteApply").onclick=applyParsed;
 };
+/* ── 截圖 → 文字 ────────────────────────────────────────────────
+   OCR 只是「把圖變成文字」的輸入管道:辨識完的文字放進同一個框,
+   解析與核對完全走原本那條路。parseBrokerPaste 的「股數 × 現價 ≈ 市值」
+   正好是 OCR 最需要的保險——認錯一個數字,兩邊就對不上,那一列自動
+   變成「需確認」,逼人逐欄核對。
+
+   只載 eng:代碼(00631L)、股數、市值、損益率全是 ASCII,
+   中文名稱根本不需要讀,載中文模型只會多下載十幾 MB。 */
+const TESS_SRC="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js";
+let tessLoading=null;
+function loadTesseract(){
+  if(window.Tesseract)return Promise.resolve(window.Tesseract);
+  if(!tessLoading)tessLoading=new Promise(function(res,rej){
+    const sc=document.createElement("script");
+    sc.src=TESS_SRC;
+    sc.onload=function(){window.Tesseract?res(window.Tesseract):rej(new Error("載入後找不到 Tesseract"))};
+    sc.onerror=function(){tessLoading=null;rej(new Error("連不上 CDN,無法下載辨識引擎"))};
+    document.head.appendChild(sc);
+  });
+  return tessLoading;
+}
+/* 券商 App 幾乎都是深色底白字,而 Tesseract 期待淺底深字——不反相的話
+   辨識率會掉到幾乎不可用。小圖順便放大,手機截圖的數字本來就很小。 */
+async function prepImage(file){
+  const bmp=await createImageBitmap(file);
+  const k=bmp.width<1200?Math.min(2,1600/bmp.width):1;
+  const w=Math.round(bmp.width*k),h=Math.round(bmp.height*k);
+  const c=document.createElement("canvas");c.width=w;c.height=h;
+  const g=c.getContext("2d");g.imageSmoothingQuality="high";g.drawImage(bmp,0,0,w,h);
+  const d=g.getImageData(0,0,w,h),p=d.data;
+  let sum=0,n=0;
+  for(let i=0;i<p.length;i+=4*97){sum+=(p[i]+p[i+1]+p[i+2])/3;n++}
+  if(n&&sum/n<128){
+    for(let i=0;i<p.length;i+=4){p[i]=255-p[i];p[i+1]=255-p[i+1];p[i+2]=255-p[i+2]}
+    g.putImageData(d,0,0);
+  }
+  return c;
+}
+async function handleImage(file){
+  if(!file)return;
+  const out=$("pasteOut");
+  out.innerHTML="<div class='sug hold'>正在辨識截圖…第一次要下載辨識引擎(約 5MB),"
+    +"之後瀏覽器會留著。全程在這台裝置上跑,圖片不會送到任何伺服器。</div>";
+  try{
+    const T=await loadTesseract();
+    const img=await prepImage(file);
+    const worker=await T.createWorker("eng");
+    let text="";
+    try{text=(await worker.recognize(img)).data.text||""}finally{await worker.terminate()}
+    if(!text.trim())throw new Error("圖片裡沒有認出任何文字");
+    /* Tesseract 把代碼結尾的 L 認成 1 的機率極高(00647L → 006471),而台股
+       槓桿 ETF 每一檔都以 L 結尾——實測三檔裡有一檔中招,那一列會整個消失:
+       代碼對不上就不進解析表,也不會被列進「設定頁沒有的代碼」。無聲消失
+       比認錯更糟,因為畫面上沒有任何線索。修完的文字放回輸入框讓你看見。
+       只有 OCR 走這一條:打字打錯的 006471 不該被悄悄改成 00647L。 */
+    text=EG.fixOcrCodes(text,INST);
+    $("pasteBox").value=text;
+    await $("btnParse").onclick();
+    out.insertAdjacentHTML("afterbegin","<div class='sug hold'>以上是從截圖認出來的。"
+      +"認錯的數字可以直接在上面那個框裡改,改完再按一次「解析」。</div>");
+    log("由截圖辨識出文字("+text.trim().length+" 字)");
+  }catch(e){
+    out.innerHTML="<div class='sug block'>截圖辨識失敗:"+esc(String((e&&e.message)||e))+"</div>"
+      +"<div class='sug hold'>手機內建的文字辨識比網頁版準很多,建議改用它:"
+      +"iPhone 在「照片」裡長按截圖上的文字 → 全選 → 拷貝;"
+      +"Android 用 Google 相簿 → 鏡頭圖示 → 選取文字 → 複製。"
+      +"複製完回來貼進上面的框再按「解析」。</div>";
+  }
+}
+$("btnPickImg").onclick=function(){$("imgFile").click()};
+$("imgFile").onchange=function(){const f=this.files[0];this.value="";handleImage(f)};
+$("pasteBox").addEventListener("paste",function(e){
+  const items=(e.clipboardData&&e.clipboardData.items)||[];
+  for(let i=0;i<items.length;i++){
+    if(items[i].type&&items[i].type.indexOf("image/")===0){
+      e.preventDefault();handleImage(items[i].getAsFile());return;
+    }
+  }
+});
+$("pasteBox").addEventListener("dragover",function(e){e.preventDefault()});
+$("pasteBox").addEventListener("drop",function(e){
+  const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(f&&f.type.indexOf("image/")===0){e.preventDefault();handleImage(f)}
+});
 async function applyParsed(){
   if(!PARSED||!PARSED.length)return;
   PARSED.forEach(function(x){
@@ -984,7 +1078,7 @@ $("btnResetPeak").onclick=function(){
 function renderLog(){$("logBox").innerHTML=S.log.slice(0,40).map(function(l){return "<div class='log'>"+esc(l)+"</div>"}).join("")||"<div class='log'>尚無紀錄</div>"}
 initUI();
 document.addEventListener("change",function(e){
-  if(!e.target.matches("input,select")||e.target.dataset.p||e.target.id==="impFile")return;
+  if(!e.target.matches("input,select")||e.target.dataset.p||e.target.type==="file")return;
   readUI();
   /* 改完持有數就要重畫:原本只存檔不重繪,切到持倉頁還是上一次的數字 */
   render(false);

@@ -731,6 +731,124 @@ describe("防線 · 券商庫存貼上", () => {
   });
 });
 
+describe("防線 · 券商庫存貼截圖", () => {
+  const ocr = () => {
+    const html = readHtml();
+    return html.slice(html.indexOf("async function handleImage"),
+      html.indexOf("async function applyParsed"));
+  };
+
+  it("OCR 只是輸入管道:辨識完要走原本那條解析", (a) => {
+    /* 另寫一條解析就會繞過「股數 × 現價 ≈ 市值」,那是這個功能唯一的保險 */
+    const h = ocr();
+    a.match(h, /\$\("btnParse"\)\.onclick\(\)/, "辨識完必須呼叫原本的解析");
+    a.ok(!/S\.units\[/.test(h), "辨識階段不可寫入持股");
+    a.ok(!/\bsave\(\)/.test(h), "辨識階段不可存檔");
+    a.ok(!/parseBrokerPaste/.test(h), "不可自己再解析一次,要共用同一條");
+  });
+
+  it("CDN 位址必須釘死版本", (a) => {
+    /* @7 或 @latest 會讓上游改版無聲改掉辨識結果,而使用者照著下單 */
+    const m = /tesseract\.js@([^/"']+)\//.exec(readHtml());
+    a.ok(m, "找不到 tesseract 的 CDN 位址");
+    a.match(m[1], /^\d+\.\d+\.\d+$/, "版本沒釘死,得到:" + m[1]);
+  });
+
+  it("辨識失敗要給一條走得通的退路", (a) => {
+    const h = ocr();
+    a.match(h, /截圖辨識失敗/, "要講出失敗");
+    a.match(h, /照片|Google 相簿/, "手機內建的辨識比網頁版準,失敗時要說");
+  });
+
+  it("深色底要反相,否則辨識率幾乎歸零", (a) => {
+    const h = readHtml().slice(readHtml().indexOf("async function prepImage"));
+    a.match(h.slice(0, 900), /255-p\[i\]/, "券商 App 是深色底白字,Tesseract 期待淺底深字");
+  });
+
+  it("OCR 專屬的代碼修補不可進解析本身", (a) => {
+    /* 打字打錯的 006471 不該被悄悄改成 00647L——那會讓錯的錢進錯的檔。
+       代碼要用真實長度:fixOcrCodes 不處理三個字元以下的代碼,
+       用共用的 INST(代碼是 A / B)會讓這題測不到任何東西。 */
+    const inst = [{ id: "00647L", name: "x", tgt: 1, src: "tw", pocket: "core" }];
+    const px = { "00647L": 137.6 };
+    const txt = "某某正2 300 1,204\n現股 006471 41,280 3.00%";
+    a.deepStrictEqual(E.parseBrokerPaste(txt, inst, px, 32.6).rows, [],
+      "parseBrokerPaste 不可自己做 OCR 修補");
+    /* 先過修補就認得出來——證明上面那個空陣列是少了修補,不是別的原因 */
+    const fixed = E.fixOcrCodes(txt, inst);
+    a.strictEqual(E.parseBrokerPaste(fixed, inst, px, 32.6).rows.length, 1,
+      "修補後應該認得出來:" + fixed);
+  });
+
+  it("空白的框不可回報成「找不到代碼」", (a) => {
+    /* 貼圖片進 textarea 不會留下任何文字,原本那句在回答一段空字串 */
+    const html = readHtml();
+    const p = html.slice(html.indexOf('$("btnParse").onclick'));
+    a.match(p.slice(0, 600), /pasteBox"\)\.value\.trim\(\)/, "按解析前要先看框裡有沒有東西");
+    a.ok(p.slice(0, 600).indexOf('value.trim()') < p.slice(0, 600).indexOf("fetchAll"),
+      "空的就不該去抓報價");
+  });
+});
+
+describe("防線 · OCR 代碼修補", () => {
+  /* 這一條在決定「這一列的錢屬於哪一檔」,所以規則刻意很窄 */
+  const inst = [{ id: "00631L" }, { id: "00670L" }, { id: "00647L" }, { id: "00897" }];
+  const f = (x) => E.fixOcrCodes(x, inst);
+
+  it("差一個易混字元就修回設定頁裡的代碼", (a) => {
+    /* 實測:Tesseract 把 00647L 認成 006471,那一列會整個無聲消失 */
+    a.strictEqual(f("IRA 006471 41,280"), "IRA 00647L 41,280");
+    a.strictEqual(f("xx 0063lL 67,500"), "xx 00631L 67,500", "互混是雙向的:l 也可能是 1");
+    a.strictEqual(f("xx 0067OL 92,200"), "xx 00670L 92,200", "字母 O 與數字 0");
+  });
+
+  it("只准差一個字元", (a) => {
+    a.strictEqual(f("O0647l 1"), "O0647l 1", "差兩個就不是辨識雜訊,是別的東西");
+  });
+
+  it("那個字元必須真的易混", (a) => {
+    a.strictEqual(f("00647X 1"), "00647X 1");
+  });
+
+  it("長度不同不修", (a) => {
+    a.strictEqual(f("0064 1"), "0064 1");
+    a.strictEqual(f("006471L 1"), "006471L 1");
+  });
+
+  it("兩個代碼都只差一個字元時寧可不改", (a) => {
+    /* 改錯一檔等於把錢算到別的標的上,無從選擇時不要猜。
+       0063IL 對 00631L 與 0063lL 各只差一個同群組字元,兩邊都像。 */
+    const two = [{ id: "00631L" }, { id: "0063lL" }];
+    a.strictEqual(E.fixOcrCodes("xx 0063IL 1", two), "xx 0063IL 1");
+    /* 先證明單獨一個的時候確實會修,否則上面那行可能只是碰巧沒命中 */
+    a.strictEqual(E.fixOcrCodes("xx 0063IL 1", [{ id: "00631L" }]), "xx 00631L 1");
+  });
+
+  it("設定頁沒有的代碼原樣留著——那是漏記的持股,要被講出來", (a) => {
+    a.strictEqual(f("現股 00888 12,345"), "現股 00888 12,345");
+  });
+
+  it("純數字不會被當成代碼改掉", (a) => {
+    a.strictEqual(f("2,000 -627 41280 12345"), "2,000 -627 41280 12345");
+  });
+
+  it("空字串、null、沒有標的都不可爆掉", (a) => {
+    a.strictEqual(f(""), "");
+    a.strictEqual(f(null), "");
+    a.strictEqual(E.fixOcrCodes("abc", []), "abc");
+    a.strictEqual(E.fixOcrCodes("abc", null), "abc");
+  });
+
+  it("網頁只在 OCR 之後叫它,而且要在解析之前", (a) => {
+    const html = readHtml();
+    const h = html.slice(html.indexOf("async function handleImage"),
+      html.indexOf("async function applyParsed"));
+    a.match(h, /EG\.fixOcrCodes\(text,INST\)/, "網頁必須改叫引擎,不可自己再寫一份");
+    a.ok(h.indexOf("EG.fixOcrCodes") < h.indexOf('$("btnParse").onclick()'),
+      "要先修代碼再解析,否則那一列已經被丟掉了");
+  });
+});
+
 describe("防線 · 成本是狀態的一部分", () => {
   it("匯入驗證認得 cost,負數要擋", (a) => {
     a.strictEqual(E.validateImport({ cost: { A: 1000 } }), null);

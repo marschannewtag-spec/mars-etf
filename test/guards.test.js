@@ -238,3 +238,223 @@ describe("防線 · 匯入驗證", () => {
     a.ok(st.dd < -0.5, "捏造出深度回撤:" + st.dd);
   });
 });
+
+/* ─────────────────────────────────────────────────────────────────
+   4. 月檢閘門 — 原本只住在 index.html,是決策卻零測試
+   ───────────────────────────────────────────────────────────────── */
+
+const FS = require("fs");
+const PATH = require("path");
+const readHtml = () => FS.readFileSync(PATH.join(__dirname, "..", "index.html"), "utf8");
+
+describe("防線 · 月檢閘門", () => {
+  /* 「任一觸發即中止,且不更新峰值與分層狀態」是規格的一部分。
+     這份清單原本只寫在 index.html 的 runCheck 裡,沒有任何測試在守——
+     而它決定要不要產生下單建議,也決定要不要推進峰值。 */
+  const ctx = { inst: INST, units: { A: 100, B: 10 }, prices: PRICES, fx: 32.6 };
+  const TODAY = "2026-11-02";
+  const good = okSignal(false);
+
+  it("資料齊全時不擋", (a) => {
+    a.deepStrictEqual(E.gateReasons(ctx, good, TODAY), []);
+  });
+
+  it("訊號無效要擋", (a) => {
+    const g = E.gateReasons(ctx, Object.assign({}, good, { risk_flag: null }), TODAY);
+    a.strictEqual(g.length, 1, "得到:" + g.join(" / "));
+    a.match(g[0], /訊號無效.*risk_flag/);
+  });
+
+  it("沒有任何標的要擋", (a) => {
+    const g = E.gateReasons({ inst: [], prices: {}, fx: 32.6 }, good, TODAY);
+    a.ok(g.some(x => /尚未設定任何標的/.test(x)), "得到:" + g.join(" / "));
+  });
+
+  it("報價缺失要擋,並點名是哪一檔", (a) => {
+    const g = E.gateReasons({ inst: INST, prices: { A: 100 }, fx: 32.6 }, good, TODAY);
+    a.ok(g.some(x => /報價缺失:B/.test(x)), "得到:" + g.join(" / "));
+  });
+
+  it("持股為 0 的標的報價缺失也要擋", (a) => {
+    /* totals 的 miss 只在「有持股卻拿不到報價」時才亮;閘門必須比它更嚴,
+       否則新加的標的抓不到價,再平衡會把它當成不存在而把錢配給別人。 */
+    const g = E.gateReasons({ inst: INST, units: {}, prices: { A: 100 }, fx: 32.6 }, good, TODAY);
+    a.ok(g.some(x => /報價缺失/.test(x)), "得到:" + g.join(" / "));
+  });
+
+  it("剛好等於過期門檻不擋,多一天才擋", (a) => {
+    const base = Date.parse(good.asof.spx);
+    const day = k => new Date(base + k * 864e5).toISOString().slice(0, 10);
+    a.deepStrictEqual(E.gateReasons(ctx, good, day(P.STALE)), [],
+      "延遲剛好 " + P.STALE + " 天仍可通行");
+    const g = E.gateReasons(ctx, good, day(P.STALE + 1));
+    a.ok(g.some(x => /市場資料過期 \d+ 天/.test(x)), "得到:" + g.join(" / "));
+  });
+
+  it("沒有資料日期時說清楚,不得印出 Infinity", (a) => {
+    const g = E.gateReasons(ctx, { risk_flag: false, spx: { last: 1, sma12m: 1 }, vix: { last: 1 } }, TODAY);
+    a.ok(g.some(x => /沒有日期/.test(x)), "得到:" + g.join(" / "));
+    a.ok(!g.some(x => /Infinity/.test(x)), "不可把 Infinity 丟到畫面上");
+  });
+
+  it("匯率無效要擋", (a) => {
+    const g = E.gateReasons({ inst: INST, prices: PRICES, fx: null }, good, TODAY);
+    a.ok(g.some(x => /匯率無效/.test(x)), "得到:" + g.join(" / "));
+  });
+
+  it("index.html 的閘門改叫引擎,不得自己再算一次", (a) => {
+    const html = readHtml();
+    a.match(html, /EG\.gateReasons\(engCtx\(\),Q\.sig,today\)/, "呼叫點必須存在");
+    a.ok(!/blockers\.push/.test(html), "閘門清單不得在網頁裡重建");
+    a.ok(!/Date\.parse\(today\)-Date\.parse/.test(html), "過期天數不得在網頁裡再算一次");
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   5. 一鍵套用的現金 — 無聲歸零會污染峰值
+   ───────────────────────────────────────────────────────────────── */
+
+describe("防線 · 一鍵套用的現金不得無聲歸零", () => {
+  it("正常情況四捨五入到千元", (a) => {
+    a.strictEqual(E.cashTWDAfter(123400, 0, 32.6), 123000);
+    a.strictEqual(E.cashTWDAfter(123600, 0, 32.6), 124000);
+  });
+
+  it("扣掉美元現金的台幣值(再四捨五入到千元)", (a) => {
+    a.strictEqual(E.cashTWDAfter(200000, 1000, 32.6), 167000, "200000 - 32600 = 167400 → 167000");
+  });
+
+  it("美元現金超過計畫現金時回傳 null,不可夾成 0", (a) => {
+    /* 原本外層包 Math.max(0, ...):台幣現金被無聲設成 0,總資產憑空蒸發,
+       而蒸發後的總值會寫進峰值,污染之後所有回撤計算與分層判斷。 */
+    a.strictEqual(E.cashTWDAfter(10000, 1000, 32.6), null);
+    a.strictEqual(E.cashTWDAfter(-1, 0, 32.6), null);
+  });
+
+  it("匯率無效時把美元現金當 0(與 totals 一致)", (a) => {
+    a.strictEqual(E.cashTWDAfter(50000, 1000, null), 50000);
+  });
+
+  it("index.html 的套用確實走這條,而且算不出來時整筆不寫入", (a) => {
+    const html = readHtml();
+    a.match(html, /EG\.cashTWDAfter\(plan\.cash,S\.cashUSD,Q\.fx\)/, "呼叫點必須存在");
+    a.ok(!/Math\.max\(0,Math\.round\(\(plan\.cash/.test(html), "舊的無聲歸零寫法必須移除");
+    /* 順序也要對:現金算不出來時不可已經把持股寫進去 */
+    const apply = html.slice(html.indexOf("async function applyPlan"));
+    a.ok(apply.indexOf("if(c==null)") < apply.indexOf("S.units[k]=plan.units[k]"),
+      "必須先判斷再寫入,否則會只套用一半");
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   6. 同一條規則只能有一份 — 容忍帶與扳機門檻
+   ───────────────────────────────────────────────────────────────── */
+
+describe("防線 · 容忍帶只能有一條規則", () => {
+  it("offBand 就是 makePlan 用的那條", (a) => {
+    a.strictEqual(E.offBand(0.30, 0.20), true, "偏離 50% 超過容忍帶 25%");
+    a.strictEqual(E.offBand(0.24, 0.20), false, "偏離 20% 仍在帶內");
+    a.strictEqual(E.offBand(0.20 * (1 + P.DRIFT), 0.20), false, "剛好在邊界上不算超出");
+  });
+
+  it("index.html 的持倉卡與引擎用同一條,不得各寫一次", (a) => {
+    const html = readHtml();
+    a.match(html, /EG\.offBand\(w,tg\)/, "網頁必須改叫引擎");
+    a.match(html, /EG\.targetWeight\(i,tc,INST\)/, "目標權重同理");
+    a.ok(!/Math\.abs\(w-tg\)>P\.DRIFT\*tg/.test(html), "舊的重複實作必須移除");
+    a.ok(!/\(1-tc\)\*i\.tgt\/INV\(\)/.test(html), "目標權重公式不得在網頁裡再寫一次");
+  });
+
+  it("自動分配與再平衡用同一條最小交易門檻", (a) => {
+    const html = readHtml();
+    a.ok(!/capTWD\*0\.002/.test(html), "裸數字 0.002 必須移除(引擎是 " + P.MIN_TRADE_FRACTION + ")");
+    a.match(html, /capTWD\*P\.MIN_TRADE_FRACTION/, "改讀 PARAMS");
+    /* 低於門檻時必須連持倉紀錄一起不動。原本仍把目標股數寫進 units,
+       等於悄悄改紀錄卻不叫你下單,紀錄從此與券商實際部位不符。 */
+    a.match(html, /\)sh=cur;/, "低於門檻要把目標股數退回現況,不能只是不顯示訂單");
+  });
+});
+
+describe("防線 · 00653L 扳機門檻只能有一份", () => {
+  it("由原始油價與匯率獨立重算", (a) => {
+    const t = (brent, usdinr) => E.tripwireArmed({ tripwire: { brent, usdinr } });
+    a.strictEqual(t(92, 97), true);
+    a.strictEqual(t(92, 95), false, "只有一個條件成立不算觸發");
+    a.strictEqual(t(89, 97), false);
+    a.strictEqual(t(P.TRIP_BRENT, P.TRIP_USDINR), false, "剛好等於門檻不算觸發(規格是嚴格大於)");
+  });
+
+  it("資料不足時回傳 null,不可當成「沒有觸發」", (a) => {
+    /* 與 validateSignal 同一種 fail-closed:缺資料不等於安全。 */
+    a.strictEqual(E.tripwireArmed({}), null);
+    a.strictEqual(E.tripwireArmed({ tripwire: { brent: null, usdinr: 97 } }), null);
+    a.strictEqual(E.tripwireArmed({ tripwire: { brent: "", usdinr: 97 } }), null);
+  });
+
+  it("網頁與契約測試都不得再寫死 90 / 96", (a) => {
+    const html = readHtml();
+    a.ok(!/Brent>90/.test(html), "網頁文字必須改讀 PARAMS");
+    a.match(html, /P\.TRIP_BRENT/, "網頁必須讀 PARAMS");
+    const ct = FS.readFileSync(PATH.join(__dirname, "..", "test", "contract.test.js"), "utf8");
+    a.match(ct, /E\.tripwireArmed\(sig\)/, "契約測試必須用引擎重算複核 Worker,不是自己再寫一次門檻");
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   7. 網頁狀態的三個小洞(刪標的、換資料源、離線)
+   ───────────────────────────────────────────────────────────────── */
+
+describe("防線 · 網頁狀態", () => {
+  it("刪除標的必須一起刪掉持股", (a) => {
+    /* 畫面是用 S.units[id]||0 畫的,殘留值會在同一代碼加回來時原封不動復活,
+       而且會跟著匯出檔走——使用者看到自己沒輸入的股數,照著下單就錯了。 */
+    const html = readHtml();
+    a.match(html, /delete S\.units\[gone\.id\]/, "刪除處必須清掉持股");
+    const del = html.slice(html.indexOf("[data-del]"));
+    a.ok(del.indexOf("delete S.units") < del.indexOf("INST.splice"),
+      "要在 splice 之前取出代碼,否則拿不到被刪的是哪一檔");
+  });
+
+  it("匯入換掉 worker 位址必須明示確認", (a) => {
+    /* 誰控制 worker 就控制 risk_flag——可以讓配置台在崩盤中顯示「正常期」。
+       匯出匯入被當成備份功能,使用者不會預期它能改資料源。 */
+    const html = readHtml();
+    const imp = html.slice(html.indexOf("impFile\").onchange"));
+    a.match(imp, /o\.worker&&o\.worker!==S\.worker&&!confirm\(/, "資料源變更必須 confirm");
+    a.ok(imp.indexOf("confirm(") < imp.indexOf("localStorage.setItem"),
+      "確認必須在寫入之前");
+  });
+
+  it("離線與部署壞掉必須分得出來", (a) => {
+    /* 沒有 service worker,離線開啟必然載不到 engine.js。不分辨的話
+       使用者在捷運上看到紅色停機畫面,會以為線上版掛了。 */
+    const html = readHtml();
+    const guard = html.slice(html.indexOf("if(!window.ETFEngine)"));
+    a.match(guard.slice(0, 900), /navigator\.onLine/, "必須先看連線狀態");
+    a.match(guard.slice(0, 900), /目前離線/, "離線要有自己的說法");
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   8. 回測資料不該住在呈現層
+   ───────────────────────────────────────────────────────────────── */
+
+describe("防線 · 回測資料與網頁解耦", () => {
+  it("D_RETS 已搬出 index.html", (a) => {
+    const html = readHtml();
+    a.ok(!/const D_RETS=\[/.test(html), "432 筆資料不得內嵌在網頁裡");
+    a.match(html, /fetch\("data\/d_rets\.json"/, "改成按下按鈕才抓");
+  });
+
+  it("data/d_rets.json 可直接讀,不需要正規表示式", (a) => {
+    const R = JSON.parse(FS.readFileSync(PATH.join(__dirname, "..", "data", "d_rets.json"), "utf8"));
+    a.ok(Array.isArray(R) && R.length === 432, "應為 432 筆陣列,得到 " + R.length);
+    a.ok(R.every(Number.isFinite), "不得有 NaN");
+  });
+
+  it("載不到時要說話,不可讓 Monte Carlo 爆掉", (a) => {
+    const html = readHtml();
+    const mc = html.slice(html.indexOf("btnMC\").onclick"));
+    a.match(mc.slice(0, 600), /catch\(e\)\{toast\(/, "抓資料失敗必須 toast,不是丟 undefined 進迴圈");
+  });
+});

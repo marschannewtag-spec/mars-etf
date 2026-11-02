@@ -31,6 +31,7 @@
      REARM  回補遲滯:回升需超過門檻 + REARM 才鬆綁,避免在門檻上來回跳
      VIX_THRESHOLD / SMA_MONTHS 風險旗標的判定條件,
        與 Worker 的 /signal 一致,用於獨立複核伺服器端的判斷
+     TRIP_BRENT / TRIP_USDINR 00653L 出場扳機的兩個門檻,同樣用於複核
   ─────────────────────────────────────────────────────────────────── */
   var PARAMS = {
     BASE: 0.20,
@@ -44,6 +45,11 @@
     REARM: 0.05,
     VIX_THRESHOLD: 32,
     SMA_MONTHS: 12,
+    /* 00653L 扳機門檻。權威計算在 Worker(原始碼不在本 repo),
+       這裡放一份是為了讓三個顯示處不再各自寫死數字;
+       兩邊是否一致由 contract.test.js 以 tripwireArmed 複核,不一致即紅燈。 */
+    TRIP_BRENT: 90,
+    TRIP_USDINR: 96,
     /* 再平衡下單門檻:變動金額低於總值這個比例就不動(避免碎單) */
     MIN_TRADE_FRACTION: 0.005,
     /* 現金偏離判定時給的容差,對應 makePlan 的 cf < DEF - EPS */
@@ -81,6 +87,15 @@
   /** 單一標的的目標權重(佔總資產),已扣除現金水位並正規化 */
   function targetWeight(i, tc, inst) {
     return (1 - tc) * (+i.tgt || 0) / weightSum(inst);
+  }
+
+  /**
+   * 權重是否超出容忍帶。makePlan 的動作判定與 PWA 持倉卡的 ⚠ 標記
+   * 必須是同一條規則——原本兩邊各寫一次,改 DRIFT 只會改到一邊。
+   */
+  function offBand(w, tg, P) {
+    P = P || PARAMS;
+    return Math.abs(w - tg) > P.DRIFT * tg;
   }
 
   /* ── 估值 ─────────────────────────────────────────────────────── */
@@ -178,6 +193,18 @@
   }
 
   /**
+   * 由原始油價與匯率獨立重算 00653L 扳機,不看 s.tripwire.armed。
+   * 回傳 null 代表資料不足以判斷。與 derivedRisk 同一個用途:
+   * 門檻搬進 PARAMS 之後,必須有人盯著 Worker 有沒有跟著一致。
+   */
+  function tripwireArmed(s, P) {
+    P = P || PARAMS;
+    var t = s && s.tripwire;
+    if (!t || !numOk(t.brent) || !numOk(t.usdinr)) return null;
+    return +t.brent > P.TRIP_BRENT && +t.usdinr > P.TRIP_USDINR;
+  }
+
+  /**
    * 驗證匯入的狀態檔。回傳 null 代表通過,否則回傳拒絕原因字串。
    *
    * 匯入是這個 App 唯一的不信任輸入——它整份覆蓋 localStorage。
@@ -217,6 +244,52 @@
     if (!s || !s.asof || !s.asof.spx) return Infinity;
     var d = Math.floor((Date.parse(today) - Date.parse(s.asof.spx)) / 864e5);
     return Number.isFinite(d) ? d : Infinity;
+  }
+
+  /**
+   * 月檢閘門:回傳中止原因清單(空陣列 = 可繼續)。
+   *
+   * 這是規格裡「任一觸發即中止,且不更新峰值與分層狀態」的那份清單。
+   * 它原本只存在於 index.html 的 runCheck 裡,是決策邏輯卻零測試覆蓋。
+   * 回傳純文字,跳脫交給呈現層——標的代碼可由匯入檔控制,必須跳脫。
+   *
+   * @param ctx    {inst, prices, fx}
+   * @param signal Worker /signal 回應
+   * @param today  YYYY-MM-DD(台北)
+   */
+  function gateReasons(ctx, signal, today, P) {
+    P = P || PARAMS;
+    var out = [], list = live(ctx.inst);
+    var sigErr = validateSignal(signal);
+    if (sigErr) out.push("市場訊號無效:" + sigErr);
+    if (!list.length) out.push("尚未設定任何標的(請至設定頁填入代碼)");
+    var missing = list.filter(function (i) {
+      return !isPos(ctx.prices ? ctx.prices[i.id] : null);
+    }).map(function (i) { return i.id; });
+    if (missing.length) out.push("報價缺失:" + missing.join("、"));
+    var stale = staleDays(signal, today);
+    if (stale > P.STALE) {
+      out.push(Number.isFinite(stale)
+        ? "市場資料過期 " + stale + " 天(asof " + signal.asof.spx + ")"
+        : "市場資料沒有日期,無法判斷是否過期");
+    }
+    if (!isPos(ctx.fx)) out.push("匯率無效");
+    return out;
+  }
+
+  /**
+   * 「一鍵套用持倉」後該記錄的台幣現金:計畫現金扣掉美元現金的台幣值。
+   *
+   * 回傳 null 代表算不出來——美元現金的台幣值超過整份計畫的現金,
+   * 代表設定頁的現金欄位與實際不符。原本外層包 Math.max(0, ...),
+   * 這種情形會被無聲歸零:總資產憑空蒸發,而且會寫進峰值污染之後的回撤。
+   *
+   * 千元粒度是刻意的,與設定頁以萬元為單位的輸入欄一致。
+   */
+  function cashTWDAfter(planCash, cashUSD, fx) {
+    var twd = planCash - (cashUSD || 0) * (isPos(fx) ? fx : 0);
+    if (!(twd >= 0)) return null;
+    return Math.round(twd / 1000) * 1000;
   }
 
   /* ── 狀態 ─────────────────────────────────────────────────────── */
@@ -314,7 +387,7 @@
       var v = valueTWD(i, units0, ctx.prices, ctx.fx);
       if (v == null) return;
       var w = v / V, tg = targetWeight(i, tc, ctx.inst);
-      if (Math.abs(w - tg) > P.DRIFT * tg) act = true;
+      if (offBand(w, tg, P)) act = true;
     });
     if (!act) {
       return { kind: "hold", message: "全部在容忍帶內——本月無動作。論點檢核:逐檔確認否證條件未觸發即續抱" };
@@ -458,10 +531,12 @@
     PARAMS: PARAMS,
     isPos: isPos, numOk: numOk, hasId: hasId, live: live,
     weightSum: weightSum, targetWeight: targetWeight, weightsSumToOne: weightsSumToOne,
+    offBand: offBand,
     priceTWD: priceTWD, valueTWD: valueTWD, totals: totals,
     tierTarget: tierTarget, advanceTier: advanceTier, computeState: computeState,
     validateSignal: validateSignal, derivedRisk: derivedRisk, riskAgrees: riskAgrees,
     validateImport: validateImport, staleDays: staleDays,
+    tripwireArmed: tripwireArmed, gateReasons: gateReasons, cashTWDAfter: cashTWDAfter,
     makePlan: makePlan, checkInvariants: checkInvariants
   };
 });

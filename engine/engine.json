@@ -22,6 +22,8 @@
     "REARM": 0.05,
     "VIX_THRESHOLD": 32,
     "SMA_MONTHS": 12,
+    "TRIP_BRENT": 90,
+    "TRIP_USDINR": 96,
     "MIN_TRADE_FRACTION": 0.005,
     "CASH_EPS": 0.001
   }

@@ -336,4 +336,4 @@ if (require.main === module) {
   main().catch(e => { console.error("監控本身出錯:", e); process.exit(1); });
 }
 
-module.exports = { evaluate, reasonText, contractAlert, weeklyAlive, aliveAlert, TRIPWIRE_TITLE };
+module.exports = { evaluate, reasonText, contractAlert, weeklyAlive, TRIPWIRE_TITLE };

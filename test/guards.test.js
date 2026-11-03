@@ -790,6 +790,46 @@ describe("防線 · 券商庫存貼截圖", () => {
   });
 });
 
+describe("防線 · 目標權重的實際佔比", () => {
+  /* 輸入框裡是相對權重,實際佔比要除以總和再扣現金。這兩步使用者看不到,
+     而它決定每個月的下單張數——填 30 可能是 28.2%,也可能是 60%。 */
+  const wsum = () => {
+    const html = readHtml();
+    return html.slice(html.indexOf("function renderWeights"), html.indexOf("function initUI"));
+  };
+
+  it("佔比必須走引擎的 targetWeight,不可在網頁自己算一次", (a) => {
+    const h = wsum();
+    a.match(h, /EG\.targetWeight\(i,P\.BASE,INST\)/, "要用引擎那一份");
+    a.ok(!/weightSum\(|\/INV\(\)/.test(h), "不可自己再除一次總和");
+    a.ok(!/0\.8|\*80/.test(h), "不可把 1-現金 寫成裸數字");
+  });
+
+  it("權重合計為 0 時說清楚,不可印出 NaN", (a) => {
+    /* targetWeight 的分母是 weightSum,為 0 時每一格都會是 NaN% */
+    const h = wsum();
+    a.match(h, /INV\(\)>0/, "算之前要先擋");
+    a.match(h, /合計為 0/, "要說出為什麼算不出來");
+  });
+
+  it("空白標的列不計入,也不顯示", (a) => {
+    /* 空白列若被算進分母,真實標的會被等比稀釋 */
+    const inst = [{ id: "00631L", tgt: 0.3 }, { id: "", tgt: 0.7 }];
+    a.strictEqual(E.weightSum(inst), 0.3, "空白列不可進分母");
+    a.strictEqual(E.live(inst).length, 1);
+    a.match(wsum(), /LIVE\(\)/, "顯示也只走有效標的");
+  });
+
+  it("改權重時只更新佔比,不可重建整張表", (a) => {
+    /* change 是失焦才觸發,整區重建會把使用者剛 tab 進去的下一格摧毀 */
+    const html = readHtml();
+    const h = html.slice(html.indexOf('$("instBox").querySelectorAll("[data-if]")'));
+    const seg = h.slice(0, 900);
+    a.match(seg, /renderWeights\(\)/, "要更新佔比");
+    a.ok(!/initUI\(\)/.test(seg), "不可在這裡重建 instBox");
+  });
+});
+
 describe("防線 · 一句話結論", () => {
   /* 這一頁每個月只回答一個問題:「要不要動、動什麼」。
      結論必須來自引擎的 plan.kind,不可由網頁自己重新判斷一次。 */

@@ -206,6 +206,18 @@ code{font-family:var(--mono);background:var(--raised);padding:1px 5px;border-rad
 .sec-row{display:grid;gap:var(--gap);grid-template-columns:320px 1fr;align-items:start}
 .sec-row>.lab{font-size:13px;color:var(--muted);line-height:1.6}
 .sec-row>.lab b{display:block;font-size:16px;font-weight:600;color:var(--text);margin-bottom:6px}
+/* 輸入的是「相對權重」,實際佔總資產要除以總和再扣掉現金水位。
+   這兩步使用者看不到:填 30 不知道那是 28.2% 還是 30%,
+   而這個數字決定每個月的下單張數。所以直接把結果印在表格下面。 */
+.wsum{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+  gap:10px 24px;margin-top:20px;padding-top:20px;border-top:1px solid var(--rule)}
+.wsum>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  font-size:var(--fs-small)}
+.wsum b{font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:var(--fs-body);color:var(--text);font-weight:500}
+.wsum .c{color:var(--muted)}
+.wsum .cash b{color:var(--muted)}
+
 /* 標的列:五個控制項擠一列,只有卡片夠寬時名稱欄才放得下。1240px 以下
    (手機全部、以及側欄仍在的 901–1240px)名稱欄會被壓成 2–36px 的碎片,
    名稱完全看不到也改不了——實測 390px 時溢出 211px。所以窄的時候拆兩行。 */
@@ -420,10 +432,11 @@ button.wide{width:100%}
     </div>
 
     <div class="sec-row">
-      <div class="lab"><b>目標配置</b>目標 % 是相對權重,會自動正規化;現金另外固定 20%。</div>
+      <div class="lab"><b>目標配置</b>填相對權重就好,不必湊 100。下面會算出每一檔實際佔總資產多少。</div>
       <div class="card">
         <div id="instBox"></div>
         <button class="sec" id="btnAddInst">＋ 新增標的</button>
+        <div id="wOut" class="wsum"></div>
       </div>
     </div>
 
@@ -573,6 +586,18 @@ document.querySelectorAll("nav a").forEach(function(a){
 function renderUnits(){
   $("unitBox").innerHTML=LIVE().map(function(i){return '<div><label>'+esc(i.id)+'</label><input data-u="'+esc(i.id)+'" type="number" value="'+(S.units[i.id]||0)+'"></div>'}).join("");
 }
+/* 把相對權重換算成實際佔比。除以總和、扣掉基準現金——兩步都是引擎的
+   targetWeight 在做的事,這裡只是把同一個函式的結果印出來,不另算一次。 */
+function renderWeights(){
+  const box=$("wOut"),list=LIVE();
+  if(!list.length){box.innerHTML="<div class='c'>還沒有任何標的</div>";return}
+  if(!(INV()>0)){box.innerHTML="<div class='c'>目標權重合計為 0,無法算出佔比</div>";return}
+  box.innerHTML=list.map(function(i){
+    return "<div><span class='c'>"+esc(i.id)+"</span><b>"
+      +(EG.targetWeight(i,P.BASE,INST)*100).toFixed(1)+"%</b></div>";
+  }).join("")
+    +"<div class='cash'><span class='c'>現金(基準)</span><b>"+(P.BASE*100).toFixed(1)+"%</b></div>";
+}
 function initUI(){
   $("cfgW").value=S.worker; $("cfgCap").value=S.cap?S.cap/10000:""; $("cfgCcy").value=S.ccy||"TWD";
   $("cashTWD").value=((S.cashTWD||0)/10000).toFixed(1); $("cashUSD").value=S.cashUSD||0;
@@ -594,7 +619,7 @@ function initUI(){
     else i[e.dataset.if]=e.value.trim();
     /* 只在未設定時補預設值。原本無條件寫 "tw",會把匯入的美股標的
        在使用者編輯任一欄位時改成台股來源,報價從此抓不到 */
-    i.src=i.src||"tw";save();
+    i.src=i.src||"tw";save();renderWeights();
     /* 不可在此重繪 instBox:change 是失焦時才觸發,整區重建會把使用者
        剛 tab 進去的下一個欄位一起摧毀,導致無法用鍵盤走完一列 */
     if(e.dataset.if==="id"){e.value=i.id;renderUnits()}
@@ -606,7 +631,7 @@ function initUI(){
     if(gone.id){delete S.units[gone.id];delete S.cost[gone.id]}
     INST.splice(+e.dataset.del,1);save();initUI();
   }});
-  renderLog();
+  renderLog();renderWeights();
 }
 function readUI(){
   S.worker=$("cfgW").value.trim().replace(/\/+$/,"");S.cap=(+$("cfgCap").value||0)*10000;S.ccy=$("cfgCcy").value;

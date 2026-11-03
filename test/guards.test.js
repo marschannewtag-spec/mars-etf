@@ -744,7 +744,9 @@ describe("防線 · 貼上後比對股數", () => {
   };
 
   it("差多少、換成錢是多少都要算出來,不要讓人自己心算", (a) => {
-    const d = E.diffHoldings(ctx, [{ id: "00631L", units: 1500 }, { id: "00670L", units: 500 }]);
+    const d = E.diffHoldings(ctx, [
+      { id: "00631L", units: 1500 }, { id: "00670L", units: 500 },
+      { id: "00653L", units: 300 }, { id: "00640L", units: 200 }]);
     a.strictEqual(d.changed.length, 1, "只有一檔變了");
     a.deepStrictEqual(d.changed[0],
       { id: "00631L", from: 1000, to: 1500, delta: 500, valueDelta: 50000 });
@@ -756,24 +758,31 @@ describe("防線 · 貼上後比對股數", () => {
     a.strictEqual(E.diffHoldings(ctx, same).valueDelta, 0);
   });
 
-  it("貼上文字沒提到、但 App 記著有持股的要指名出來", (a) => {
-    /* 套用只寫入貼上來的代碼,沒提到的會原封不動留著:
-       賣光的部位變成幽靈,繼續被算進總值、繼續產生下單建議 */
+  it("貼上文字沒提到、但 App 記著有持股的要逐檔指名", (a) => {
+    /* 會被歸零不等於可以默默歸零:只貼到半個畫面是常態,
+       所以每一檔都要在按下「套用」之前出現在畫面上 */
     const d = E.diffHoldings(ctx, [{ id: "00631L", units: 1000 }]);
     a.deepStrictEqual(d.missing.map(m => m.id), ["00670L", "00653L", "00640L"]);
     a.strictEqual(d.missing[0].units, 500);
     a.strictEqual(d.missing[0].value, 100000);
   });
 
-  it("沒被提到的不可當成已賣出——券商畫面會捲動,貼上來的可能只是一部分", (a) => {
+  it("貼上的那一份就是完整庫存:沒被提到的視為已出清", (a) => {
+    /* 「持倉就是我貼的」。沒被提到卻原封不動留著,賣光的部位會變成幽靈,
+       繼續被算進總值、繼續產生下單建議 */
     const d = E.diffHoldings(ctx, [{ id: "00631L", units: 1000 }]);
-    /* 市值維持原樣,不可把沒看到的那三檔算成 0 */
-    a.strictEqual(d.valueTo, d.valueFrom, "沒提到的要維持原值");
-    a.strictEqual(d.changed.length, 0, "沒提到不等於變動");
+    a.deepStrictEqual(d.changed.map(c => c.id), ["00670L", "00653L", "00640L"]);
+    a.deepStrictEqual(d.changed.map(c => c.to), [0, 0, 0]);
+    /* 總結句講的市值必須跟套用後真正會發生的事一致 */
+    a.strictEqual(d.valueFrom, 100000 + 100000 + 15000 + 2000);
+    a.strictEqual(d.valueTo, 100000, "只剩貼上來的那一檔");
   });
 
   it("股數歸零是合法的變動,要算進去", (a) => {
-    const d = E.diffHoldings(ctx, [{ id: "00653L", units: 0 }]);
+    const d = E.diffHoldings(ctx, [
+      { id: "00631L", units: 1000 }, { id: "00670L", units: 500 },
+      { id: "00653L", units: 0 }, { id: "00640L", units: 200 }]);
+    a.strictEqual(d.changed.length, 1);
     a.strictEqual(d.changed[0].delta, -300);
     a.strictEqual(d.changed[0].valueDelta, -15000);
   });
@@ -786,9 +795,23 @@ describe("防線 · 貼上後比對股數", () => {
   });
 
   it("空清單與 null 不可爆掉", (a) => {
-    a.deepStrictEqual(E.diffHoldings(ctx, []).changed, []);
-    a.deepStrictEqual(E.diffHoldings(ctx, null).changed, []);
+    /* 空的貼上等於「全部出清」,但一定要指名,不可無聲歸零 */
+    a.strictEqual(E.diffHoldings(ctx, []).missing.length, 4);
+    a.strictEqual(E.diffHoldings(ctx, null).valueTo, 0);
     a.strictEqual(E.diffHoldings({ inst: [], units: {} }, null).valueFrom, 0);
+  });
+
+  it("歸零造成的總值下降不可被當成市場回撤", (a) => {
+    /* 峰值只會往上,所以歸零之後 dd 會憑空出現一段回撤,而 dd 決定
+       分批抄底。實測兩檔歸零就讓 dd 從 0% 變成 -13.5%。 */
+    const html = readHtml();
+    const ap = html.slice(html.indexOf("async function applyParsed"),
+      html.indexOf('$("btnExport").onclick'));
+    a.match(ap, /if\(nz\)/, "有歸零就必須講");
+    a.match(ap, /不一定是市場下跌/, "要說清楚這段回撤不是市場造成的");
+    a.match(ap, /重設峰值/, "要指出修正的那顆按鈕在哪");
+    a.ok(ap.indexOf("await runCheck()") < ap.indexOf("if(nz)"),
+      "要等月檢算完才拿得到 dd");
   });
 
   it("網頁確實接上了,而且講出幽靈持股", (a) => {
@@ -797,6 +820,115 @@ describe("防線 · 貼上後比對股數", () => {
     a.match(p, /EG\.diffHoldings\(engCtx\(\),PARSED\)/, "寫好沒接上,測試照樣全綠");
     a.match(p, /d\.missing\.length/, "沒被提到的持股必須講出來");
     a.match(p, /<th>差額<\/th>/, "差額要印成一欄,不要讓人自己減");
+    /* 「持倉就是我貼的」:沒出現的要歸零,而且每一檔都要先列成一行——
+       會動到錢的事不可以只寫在下面那段字裡 */
+    a.match(p, /tr class='gone'/, "會被歸零的那幾檔要列進預覽表");
+    const ap = readHtml().slice(readHtml().indexOf("async function applyParsed"));
+    a.match(ap.slice(0, 1200), /PZERO\|\|\[\]\)\.forEach/, "講了卻沒真的歸零");
+    a.match(ap.slice(0, 1200), /delete S\.cost\[id\]/,
+      "成本沒清掉,下次買回來會沿用上一輪的成本,未實現損益從此是假的");
+  });
+});
+
+describe("防線 · 資料日期差幾個交易日", () => {
+  /* 2026-10-30 是週五,11-02 週一,11-03 週二 */
+  const sig = (d) => ({ asof: { spx: d } });
+
+  it("週五的收盤在週二看是 4 個日曆天,但只落後 1 個交易日", (a) => {
+    a.strictEqual(E.staleDays(sig("2026-10-30"), "2026-11-03"), 4);
+    a.strictEqual(E.openDaysBehind(sig("2026-10-30"), "2026-11-03"), 1,
+      "「4 天前」會讓人以為資料壞了,實際上中間只有週一一個交易日");
+  });
+
+  it("週五的收盤在週一看完全沒落後", (a) => {
+    a.strictEqual(E.openDaysBehind(sig("2026-10-30"), "2026-11-02"), 0);
+    a.strictEqual(E.staleDays(sig("2026-10-30"), "2026-11-02"), 3, "日曆天仍是 3");
+  });
+
+  it("真的落後就要算出來,週末不可拿來打折", (a) => {
+    a.strictEqual(E.openDaysBehind(sig("2026-10-26"), "2026-11-03"), 5);
+  });
+
+  it("同一天是 0,沒有 asof 是 Infinity", (a) => {
+    a.strictEqual(E.openDaysBehind(sig("2026-11-03"), "2026-11-03"), 0);
+    a.strictEqual(E.openDaysBehind({}, "2026-11-03"), Infinity);
+    a.strictEqual(E.openDaysBehind(null, "2026-11-03"), Infinity);
+  });
+
+  it("資料比今天新不可回負數,超過一年不逐日數", (a) => {
+    a.strictEqual(E.openDaysBehind(sig("2026-11-05"), "2026-11-03"), 0);
+    a.strictEqual(E.openDaysBehind(sig("2020-01-02"), "2026-11-03"), Infinity);
+  });
+
+  it("閘門仍然用日曆天——這個函式不得影響決策", (a) => {
+    /* STALE 是策略參數。把閘門改成交易日是獨立的策略變更,不在顯示層偷做 */
+    const eng = FS.readFileSync(PATH.join(__dirname, "..", "engine", "engine.js"), "utf8");
+    const g = eng.slice(eng.indexOf("function gateReasons"), eng.indexOf("function makePlan"));
+    a.ok(/staleDays\(/.test(g), "閘門必須仍呼叫 staleDays");
+    a.ok(!/openDaysBehind/.test(g), "閘門不可改用交易日");
+  });
+});
+
+describe("防線 · 目標配置體檢", () => {
+  const mk = (tgts) => tgts.map((t, k) => ({ id: "0" + (k + 1) + "L", name: "x", tgt: t, src: "tw", pocket: "core" }));
+
+  it("合計 80% 加現金 20% 剛好 100,不該報問題", (a) => {
+    const r = E.auditWeights(mk([0.30, 0.15, 0.10, 0.10, 0.10, 0.05]), 0.20);
+    a.strictEqual(r.fix, null);
+    a.deepStrictEqual(r.issues, []);
+  });
+
+  it("加起來不是 100 要講出來,並給出填進去就對的那組數字", (a) => {
+    /* 使用者實際的六檔合計 85%,加現金 20% 等於 105% */
+    const inst = mk([0.30, 0.15, 0.10, 0.10, 0.15, 0.05]);
+    const r = E.auditWeights(inst, 0.20);
+    a.ok(r.issues.some(x => /105\.0%/.test(x)), "要講出目前合計是多少:" + r.issues.join(" / "));
+    a.ok(r.fix, "要給得出修正值");
+    const sum = Object.keys(r.fix).reduce((s, k) => s + r.fix[k], 0);
+    a.ok(Math.abs(sum - 0.80) < 1e-9, "修正後各標的合計應為 1-現金:" + sum);
+    /* 修正值等於引擎本來在用的那組,只取到 0.1 個百分點——
+       填回去之後畫面與引擎一致,決策位移不超過 0.1pp(容忍帶是 25%) */
+    inst.forEach(i => a.ok(Math.abs(r.fix[i.id] - E.targetWeight(i, 0.20, inst)) < 1.01e-3,
+      i.id + ":" + r.fix[i.id] + " vs " + E.targetWeight(i, 0.20, inst)));
+    /* 每一個都必須是 0.1% 的整數倍,否則設定頁顯示不下 */
+    inst.forEach(i => a.strictEqual(Math.round(r.fix[i.id] * 1e5) % 100, 0, i.id));
+  });
+
+  it("修正過一次之後不可還是紅字", (a) => {
+    const inst = mk([0.30, 0.15, 0.10, 0.10, 0.15, 0.05]);
+    const fix = E.auditWeights(inst, 0.20).fix;
+    inst.forEach(i => { i.tgt = fix[i.id]; });
+    a.strictEqual(E.auditWeights(inst, 0.20).fix, null, "按了修正還是不等於 100% 就等於沒修");
+  });
+
+  it("目標權重 0 的標的會被要求全部賣出,要先警告", (a) => {
+    const r = E.auditWeights(mk([0.50, 0.30, 0]), 0.20);
+    a.ok(r.issues.some(x => /03L/.test(x) && /賣出/.test(x)), r.issues.join(" / "));
+  });
+
+  it("代碼重複會讓後面那列覆蓋前面那列", (a) => {
+    const inst = mk([0.40, 0.40]);
+    inst[1].id = inst[0].id;
+    const r = E.auditWeights(inst, 0.20);
+    a.ok(r.issues.some(x => /重複/.test(x)), r.issues.join(" / "));
+  });
+
+  it("空白代碼不算進配置,但要講", (a) => {
+    const inst = mk([0.40, 0.40]);
+    /* 兩列:一列空白不夠——漏掉 return 的版本在只有一列時行為一樣 */
+    inst.push({ id: "", name: "", tgt: 0.2, src: "tw", pocket: "core" });
+    inst.push({ id: "  ", name: "", tgt: 0.2, src: "tw", pocket: "core" });
+    const r = E.auditWeights(inst, 0.20);
+    a.ok(r.issues.some(x => /有 2 列沒有填代碼/.test(x)), r.issues.join(" / "));
+    a.ok(!r.issues.some(x => /重複/.test(x)),
+      "兩列空白不是「代碼重複」:" + r.issues.join(" / "));
+    a.ok(Math.abs(r.sum - 0.80) < 1e-9, "空白列不得稀釋真實標的");
+  });
+
+  it("全部為 0 時不可產生除以零的修正值", (a) => {
+    const r = E.auditWeights(mk([0, 0]), 0.20);
+    a.strictEqual(r.fix, null, "分母是 0,給不出修正值就不要給");
+    a.strictEqual(r.sum, 0);
   });
 });
 
@@ -867,6 +999,82 @@ describe("防線 · 損益率的負號掉了", () => {
   });
 });
 
+describe("防線 · 買入價 × 股數", () => {
+  const inst = [{ id: "00647L", name: "元大S&P500正2", tgt: 0.15, src: "tw", pocket: "core" }];
+  const px = { "00647L": 22.6 };
+
+  /* 數字全部由 成本/股數/現價 推出來,彼此封閉:
+     股數 6,710 · 買入價 23.80 · 目前價 22.60
+     成本 159,698 · 市值 151,646 · 損益 -8,052 · 損益率 -5.04% */
+  it("截圖把負號吃掉也算得出虧損——買入價就印在畫面上", (a) => {
+    const txt = "元大S&P500正2 6,710 8,052 現股 00647L 151,646 5.04% 23.80 22.60";
+    const r = E.parseBrokerPaste(txt, inst, px, 32.6).rows[0];
+    a.strictEqual(r.units, 6710);
+    a.strictEqual(r.cost, 159698, "買入價 23.80 × 6,710 股");
+    a.ok(r.pnlPct < 0, "買入價高於目前價就是虧損,不必靠負號");
+    a.strictEqual(r.costSure, true, "兩個價格印在畫面上,沒有在猜");
+  });
+
+  it("有負號時結果必須一樣,不可兩條路兩個答案", (a) => {
+    const txt = "元大S&P500正2 6,710 -8,052 現股 00647L 151,646 -5.04% 23.80 22.60";
+    const r = E.parseBrokerPaste(txt, inst, px, 32.6).rows[0];
+    a.strictEqual(r.cost, 159698);
+    a.ok(r.pnlPct < 0);
+  });
+
+  it("同量級的小數不只一個就放棄,不可猜一個價格", (a) => {
+    /* 多出一個 22.95(前一列的價格被切進來)。這一列沒有損益金額,
+       三數互推裁決不了,所以「有沒有用買入價」在結果上分得出來。 */
+    const txt = "元大S&P500正2 6,710 現股 00647L 151,646 5.04% 23.80 22.60 22.95";
+    const r = E.parseBrokerPaste(txt, inst, px, 32.6).rows[0];
+    a.notStrictEqual(r.cost, 159698, "認不出來就該退回三數互推,不是挑一個");
+    a.strictEqual(r.costSure, false, "猜不出來就要說猜不出來");
+  });
+
+  it("只有一個就該用它(證明上一道不是永遠放棄)", (a) => {
+    const txt = "元大S&P500正2 6,710 現股 00647L 151,646 5.04% 23.80 22.60";
+    const r = E.parseBrokerPaste(txt, inst, px, 32.6).rows[0];
+    a.strictEqual(r.cost, 159698, "沒有損益金額也算得出成本");
+    a.strictEqual(r.costSure, true);
+  });
+
+  it("買入價與損益率對不上就是有一邊認錯,不可宣稱確定", (a) => {
+    /* 23.80 被認成 28.80(3 認成 8):成本算成 193,248,
+       損益率會是 -21.5%,不是畫面上印的 -5.04% */
+    const txt = "元大S&P500正2 6,710 8,052 現股 00647L 151,646 5.04% 28.80 22.60";
+    const r = E.parseBrokerPaste(txt, inst, px, 32.6).rows[0];
+    a.strictEqual(r.cost, 193248, "據實回報認出來的那個數字");
+    a.strictEqual(r.costSure, false, "差 16 個百分點還說確定,就是在騙人");
+  });
+
+  it("損益率不是價格:後面跟著 % 的小數不可當成買入價", (a) => {
+    /* 沒有價格欄,只有 15.04% —— 15.04 × 6,710 = 100,918,不可變成成本 */
+    const txt = "元大S&P500正2 6,710 19,820 現股 00647L 151,646 15.04%";
+    const r = E.parseBrokerPaste(txt, inst, px, 32.6).rows[0];
+    a.notStrictEqual(r.cost, 100918, "% 後面的數字被當成股價了");
+  });
+
+  it("同一列補上真的買入價就該用它(證明上一道不是永遠回 null)", (a) => {
+    const txt = "元大S&P500正2 6,710 19,820 現股 00647L 151,646 15.04% 22.00 22.60";
+    const r = E.parseBrokerPaste(txt, inst, px, 32.6).rows[0];
+    a.strictEqual(r.cost, 147620, "22.00 × 6,710");
+  });
+
+  it("市值帶小數時不可被當成買入價", (a) => {
+    /* 151,646.00 × 6,710 股 = 十億。價格必須跟目前價同一個量級,
+       差三倍以上的小數一律不是這一列的買入價。 */
+    const txt = "元大S&P500正2 6,710 現股 00647L 151,646.00 5.04% 22.60";
+    const r = E.parseBrokerPaste(txt, inst, px, 32.6).rows[0];
+    a.ok(r.cost < 1e7, "成本被算成 " + r.cost + ",那是市值當成股價了");
+  });
+
+  it("沒有報價時認不出目前價,整條路要安靜地關掉", (a) => {
+    const txt = "元大S&P500正2 6,710 8,052 現股 00647L 151,646 5.04% 23.80 22.60";
+    const r = E.parseBrokerPaste(txt, inst, {}, 32.6).rows[0];
+    a.ok(r.units != null, "股數還是要猜得出來");
+  });
+});
+
 describe("防線 · 券商庫存貼截圖", () => {
   const ocr = () => {
     const html = readHtml();
@@ -897,8 +1105,36 @@ describe("防線 · 券商庫存貼截圖", () => {
   });
 
   it("深色底要反相,否則辨識率幾乎歸零", (a) => {
-    const h = readHtml().slice(readHtml().indexOf("async function prepImage"));
-    a.match(h.slice(0, 900), /255-p\[i\]/, "券商 App 是深色底白字,Tesseract 期待淺底深字");
+    const html = readHtml();
+    const h = html.slice(html.indexOf("async function prepVariants"),
+      html.indexOf("function ocrScore"));
+    a.match(h, /<128/, "要先量平均亮度才知道是不是深色底");
+    a.match(h, /dark\?255:0/, "券商 App 是深色底白字,Tesseract 期待淺底深字");
+  });
+
+  it("同一張圖要用多種前處理各認一次,由解析結果挑贏家", (a) => {
+    /* 單一前處理實測很不穩:灰階讓 0 容易被認成 8,二值化又會把對比
+       不足的區塊整塊吃掉。只跑一種就是賭這張圖剛好適合那一種。 */
+    const html = readHtml();
+    const pv = html.slice(html.indexOf("async function prepVariants"),
+      html.indexOf("function ocrScore"));
+    a.match(pv, /return \[mk\(gray\),mk\(bin\)\]/, "至少要有灰階與二值化兩種");
+    const h = html.slice(html.indexOf("async function handleImage"),
+      html.indexOf("async function applyParsed"));
+    a.match(h, /ocrScore\(/, "挑哪一份準不可用字數猜");
+    a.match(h, /sc\.sure>best\.sc\.sure/,
+      "排名的第一順位必須是「對上幾列」,不是「認出幾個字」");
+    a.ok(h.indexOf("ocrScore") < h.indexOf('$("pasteBox").value=text'),
+      "要先挑出贏家才填回輸入框");
+  });
+
+  it("辨識參數要釘住:自動分頁會把表格切壞", (a) => {
+    const html = readHtml();
+    a.match(html, /tessedit_pageseg_mode:"6"/, "psm 6 = 一整塊文字,表格才不會被切成碎塊");
+    a.match(html, /tessedit_char_whitelist/, "不讀中文,留著只會讓 0 被認成形狀相近的漢字");
+    const h = html.slice(html.indexOf("async function handleImage"),
+      html.indexOf("async function applyParsed"));
+    a.match(h, /setParameters\(TESS_CFG\)/, "參數寫好沒套用上,測試照樣全綠");
   });
 
   it("OCR 專屬的代碼修補不可進解析本身", (a) => {
@@ -1109,13 +1345,113 @@ describe("防線 · OCR 代碼修補", () => {
     a.strictEqual(E.fixOcrCodes("abc", null), "abc");
   });
 
+  it("結尾的 L 被認成句點也要修得回來", (a) => {
+    /* 實測:合成的深色截圖裡 00647L 被 Tesseract 認成 00647.。
+       代碼對不上那一列會整列消失,而「貼上的就是完整庫存」會把
+       消失的部位歸零——一個句點等於無聲賣掉一檔。 */
+    const inst = [{ id: "00647L", name: "x", tgt: 1, src: "tw", pocket: "core" }];
+    a.strictEqual(E.fixOcrCodes("SP500 2,000 00647. 275,200 5.10%", inst),
+      "SP500 2,000 00647L 275,200 5.10%");
+  });
+
+  it("價格不可被改成代碼", (a) => {
+    /* token 含句點之後,184.85 也變成一個長度 6 的 token。
+       只准差一個字元、且必須唯一命中,所以它動不了。 */
+    const inst = [{ id: "00647L", name: "x", tgt: 1, src: "tw", pocket: "core" },
+                  { id: "184.8L", name: "y", tgt: 1, src: "tw", pocket: "core" }];
+    const txt = "00647L 184,850 8.74% 170.00 184.85 31.78";
+    a.strictEqual(E.fixOcrCodes(txt, inst), txt, "價格被當成認錯的代碼改掉了");
+  });
+
   it("網頁只在 OCR 之後叫它,而且要在解析之前", (a) => {
     const html = readHtml();
     const h = html.slice(html.indexOf("async function handleImage"),
       html.indexOf("async function applyParsed"));
-    a.match(h, /EG\.fixOcrCodes\(text,INST\)/, "網頁必須改叫引擎,不可自己再寫一份");
+    a.match(h, /EG\.fixOcrCodes\(/, "網頁必須改叫引擎,不可自己再寫一份");
     a.ok(h.indexOf("EG.fixOcrCodes") < h.indexOf('$("btnParse").onclick()'),
       "要先修代碼再解析,否則那一列已經被丟掉了");
+    /* 修補也必須在評分之前:沒修補的那一份少了一列,分數會比實際低,
+       於是比較差的前處理反而勝出 */
+    a.ok(h.indexOf("EG.fixOcrCodes") < h.indexOf("ocrScore("),
+      "要先修代碼再評分,否則是拿「少了一列」的版本去比分數");
+  });
+});
+
+describe("防線 · 總資產只有一份", () => {
+  it("設定頁不可再有「總投入金額」欄位", (a) => {
+    /* 持倉已經是貼券商庫存貼進來的。同一個數字要人維護兩份,填舊了就
+       把自動分配與四年模擬一起算歪,而且錯得毫無異狀。 */
+    const html = readHtml();
+    a.ok(!/id="cfgCap"/.test(html), "總投入金額的輸入框還在");
+    a.ok(!/\$\("cfgCap"\)/.test(html), "還有程式在讀它");
+    a.ok(!/S\.ccy==="USD"\?S\.cap/.test(html), "還有地方在用它當總資產");
+  });
+
+  it("自動分配與四年模擬都走同一個 capNow", (a) => {
+    const html = readHtml();
+    a.match(html, /function capNow\(\)/, "總資產的來源只能有一份");
+    const auto = html.slice(html.indexOf('$("btnAuto").onclick'), html.indexOf('$("btnMC").onclick'));
+    const mc = html.slice(html.indexOf('$("btnMC").onclick'), html.indexOf("let PARSED"));
+    a.match(auto, /capNow\(\)/, "自動分配沒用上");
+    a.match(mc, /capNow\(\)/, "四年模擬沒用上");
+  });
+
+  it("報價缺一檔就不可拿低估的總值去配股數", (a) => {
+    /* totals 的 V 在報價缺失時是低估值,拿它當總資產會算出偏小的目標
+       股數——等於要人賣掉本來該留的部位 */
+    const html = readHtml();
+    const cn = html.slice(html.indexOf("function capNow()"), html.indexOf("function pxTWD"));
+    a.match(cn, /t\.miss/, "沒檢查報價缺失");
+    a.match(cn, /v:null/, "缺報價時必須回 null,不可回低估值");
+  });
+});
+
+describe("防線 · 設定頁的版面優先序", () => {
+  it("備份與進階必須在另一頁", (a) => {
+    /* 一年用一次的東西不該跟每個月要看的東西並排 */
+    const html = readHtml();
+    a.match(html, /id="view-more"/, "沒有「更多」那一頁");
+    const set = html.slice(html.indexOf('id="view-set"'), html.indexOf('id="view-more"'));
+    a.ok(!/id="btnExport"/.test(set), "匯出還留在設定頁");
+    a.ok(!/id="cfgW"/.test(set), "資料來源網址還留在設定頁");
+    const more = html.slice(html.indexOf('id="view-more"'));
+    a.match(more, /id="btnExport"/);
+    a.match(more, /id="cfgW"/);
+    a.match(more, /id="btnResetPeak"/);
+  });
+
+  it("換頁要走得通,不可只有去沒有回", (a) => {
+    const html = readHtml();
+    a.match(html, /class="morelink" data-v="more"/, "設定頁要有一條進去的路");
+    a.match(html, /class="morelink" data-v="set"/, "更多那一頁要有一條回去的路");
+    /* 換頁連結不只在 nav 裡了,綁在 nav a 上的話頁內連結會整個死掉 */
+    a.match(html, /document\.querySelectorAll\("\[data-v\]"\)/, "綁定範圍沒有擴到頁內連結");
+    /* 「更多」沒有自己的頁籤,高亮必須留給「設定」,否則三個頁籤全暗 */
+    a.match(html, /v==="more"\?"set":v/, "進了「更多」之後沒有任何頁籤是亮的");
+  });
+
+  it("目標配置體檢要真的畫出來", (a) => {
+    const html = readHtml();
+    a.match(html, /id="wAudit"/, "沒有放體檢區");
+    a.match(html, /function renderAudit\(\)/);
+    a.match(html, /EG\.auditWeights\(INST,P\.BASE\)/, "網頁不可自己再算一份");
+    const rw = html.slice(html.indexOf("function renderWeights()"), html.indexOf("function renderAudit()"));
+    a.match(rw, /renderAudit\(\)/, "寫好沒接上,測試照樣全綠");
+    /* 修正鈕填回去的必須是引擎給的那組,不是網頁自己算的 */
+    const ra = html.slice(html.indexOf("function renderAudit()"), html.indexOf("function readUI"));
+    a.match(ra, /i\.tgt=au\.fix\[i\.id\]/, "修正值必須來自引擎");
+  });
+
+  it("資料日期要講交易日,閘門仍講日曆天", (a) => {
+    /* 週五收盤的資料在週二看是 4 個日曆天,但中間只有週一一個交易日,
+       而且那就是最新的收盤價。「4 天前」是週末造成的假警報。 */
+    const html = readHtml();
+    const r = html.slice(html.indexOf('const asof=(s.asof&&s.asof.spx)'), html.indexOf("/* 峰值與分層推進"));
+    a.match(r, /EG\.openDaysBehind\(/, "沒改用交易日");
+    a.match(r, /個交易日/, "單位要寫出來,不然看不出跟日曆天的差別");
+    a.ok(!/" 天前"/.test(r), "還在印日曆天的「N 天前」");
+    /* 日曆天沒有消失,只是搬到 tooltip:閘門用的是它,不可讓人查不到 */
+    a.match(r, /stamp\.title=/, "日曆天與閘門門檻不可完全看不到");
   });
 });
 

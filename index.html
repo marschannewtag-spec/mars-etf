@@ -192,6 +192,17 @@ textarea{height:auto;padding:10px 11px;line-height:1.5;resize:vertical}
   font-family:var(--mono);font-variant-numeric:tabular-nums}
 .prev td:first-child{text-align:left;font-family:var(--sans)}
 .prev tr.unsure td{color:var(--warning)}
+/* 貼上的那一份就是完整庫存,沒出現的會被歸零。那是會動到錢的事,
+   必須在按下「套用」之前就看得見,所以用警示色列成一行。 */
+.prev tr.gone td{color:var(--negative)}
+.audit{margin-top:18px;padding:16px 18px;border:1px solid var(--negative);
+  border-radius:var(--radius-input);font-size:var(--fs-small);line-height:1.7}
+.audit b{display:block;font-size:var(--fs-body);margin-bottom:8px;color:var(--negative)}
+.audit ul{margin:0;padding-left:20px}
+.audit button{margin-top:14px}
+.morelink{display:inline-block;margin-top:var(--gap);font-size:var(--fs-small);
+  color:var(--muted);text-decoration:none}
+.morelink:hover{color:var(--text)}
 /* 持倉卡的第二行:成本與未實現損益 */
 .hcost{display:flex;justify-content:space-between;color:var(--muted);font-size:var(--fs-small);
   font-family:var(--mono);font-variant-numeric:tabular-nums;margin-top:4px}
@@ -432,22 +443,14 @@ button.wide{width:100%}
     </div>
 
     <div class="sec-row">
-      <div class="lab"><b>目標配置</b>填相對權重就好,不必湊 100。下面會算出每一檔實際佔總資產多少。</div>
+      <div class="lab"><b>目標配置</b>填相對權重就好,不必湊 100 —— 加起來不是 100% 的時候下面會告訴你,按一下就改好。</div>
       <div class="card">
         <div id="instBox"></div>
         <button class="sec" id="btnAddInst">＋ 新增標的</button>
         <div id="wOut" class="wsum"></div>
-      </div>
-    </div>
-
-    <div class="sec-row">
-      <div class="lab"><b>總投入金額</b>「自動分配」與模擬都用這個數字當總資產。</div>
-      <div class="card">
-        <div class="grid2">
-          <div><label for="cfgCap">金額(萬)</label><input id="cfgCap" type="number" placeholder="100"></div>
-          <div><label for="cfgCcy">幣別</label><select id="cfgCcy"><option>TWD</option><option>USD</option></select></div>
-        </div>
+        <div id="wAudit"></div>
         <div style="margin-top:20px"><button id="btnAuto">依目標配置自動分配</button></div>
+        <div class="note">自動分配用的總資產就是「持倉」頁算出來的組合總值(持股市值 + 現金),不必另外填。</div>
       </div>
     </div>
 
@@ -467,12 +470,26 @@ button.wide{width:100%}
             <tr><td>4 年虧損機率 †</td><td>~13%</td></tr>
           </tbody>
         </table>
-        <div style="margin-top:20px"><button class="sec wide" id="btnMC">用目前投入額跑 4 年模擬</button></div>
+        <div style="margin-top:20px"><button class="sec wide" id="btnMC">用我的組合總值跑 4 年模擬</button></div>
         <div id="mcOut" class="mono" style="margin-top:16px;line-height:1.7"></div>
         <div class="note">† 沿用已佚失的原始回測,本機資料重現不出來(月頻取樣看不到月中低點)。本機實測:2015 起年化 18.3% / 最深 -34.5%,4 年虧損機率 11.3–11.6%。</div>
       </div>
     </div>
 
+  </div>
+
+  <a href="#" class="morelink" data-v="more">備份、紀錄與進階設定 →</a>
+</div>
+
+<!-- ═══ 更多(備份 / 紀錄 / 進階)═══
+     一年用一次的東西不該跟每個月要看的東西並排。 -->
+<div class="view" id="view-more">
+  <div class="titlebar"><div class="lead">
+    <h1>備份與進階</h1>
+    <div class="heroSub">平常不用進來。換手機或清瀏覽器資料之前記得先匯出一份。</div>
+  </div></div>
+
+  <div class="stack">
     <div class="sec-row">
       <div class="lab"><b>備份</b>資料綁這個網域,瀏覽器清掉就沒了。每次月檢後匯出一份。</div>
       <div class="card">
@@ -493,6 +510,8 @@ button.wide{width:100%}
       </div>
     </div>
   </div>
+
+  <a href="#" class="morelink" data-v="set">← 回設定</a>
 </div>
 
 </div></main>
@@ -572,15 +591,17 @@ function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";set
 const save=function(){localStorage.setItem("etf2x",JSON.stringify(S))};
 const log=function(m){S.log.unshift(new Date().toISOString().slice(0,16).replace("T"," ")+" · "+m);S.log=S.log.slice(0,500);save();renderLog()};
 let Q={px:{},fx:null,sig:null};
-/* tabs */
-document.querySelectorAll("nav a").forEach(function(a){
-  a.onclick=function(e){e.preventDefault();
-    document.querySelectorAll("nav a").forEach(function(x){x.classList.remove("on")});
-    a.classList.add("on");
-    document.querySelectorAll(".view").forEach(function(v){v.classList.remove("active")});
-    $("view-"+a.dataset.v).classList.add("active");
-    window.scrollTo(0,0);
-  };
+/* tabs。換頁連結不只在 nav 裡(設定頁底部有一條通往「更多」),
+   所以綁在 [data-v] 上。「更多」沒有自己的頁籤,高亮留給「設定」。 */
+function go(v){
+  const on=v==="more"?"set":v;
+  document.querySelectorAll("nav a").forEach(function(x){x.classList.toggle("on",x.dataset.v===on)});
+  document.querySelectorAll(".view").forEach(function(x){x.classList.remove("active")});
+  $("view-"+v).classList.add("active");
+  window.scrollTo(0,0);
+}
+document.querySelectorAll("[data-v]").forEach(function(a){
+  a.onclick=function(e){e.preventDefault();go(a.dataset.v)};
 });
 /* 「手動校正持有數」的欄位以標的代碼為 key,只有代碼變動時才需要重建 */
 function renderUnits(){
@@ -597,9 +618,29 @@ function renderWeights(){
       +(EG.targetWeight(i,P.BASE,INST)*100).toFixed(1)+"%</b></div>";
   }).join("")
     +"<div class='cash'><span class='c'>現金(基準)</span><b>"+(P.BASE*100).toFixed(1)+"%</b></div>";
+  renderAudit();
+}
+/* 設定錯誤的體檢。引擎一律正規化,所以合計不是 100% 不會「算錯」——
+   但畫面上那幾個數字跟引擎實際在用的不一樣,而人是照畫面做決定的。
+   填 30/15/10/10/15/5(合計 85)看起來剛好,實際每一檔都被縮小。 */
+function renderAudit(){
+  const au=EG.auditWeights(INST,P.BASE);
+  if(!au.issues.length){$("wAudit").innerHTML="";return}
+  $("wAudit").innerHTML="<div class='audit'><b>這份配置有問題</b><ul>"
+    +au.issues.map(function(x){return "<li>"+esc(x)+"</li>"}).join("")
+    +"</ul>"+(au.fix?"<button class='sec' id='btnFixW'>幫我改成合計 100%</button>":"")+"</div>";
+  if(!au.fix)return;
+  $("btnFixW").onclick=function(){
+    /* 填進去的就是引擎本來在用的那組比例,所以這一按不改變任何決策,
+       只是讓畫面上的數字跟引擎對齊(四捨五入到 0.1 個百分點)。 */
+    LIVE().forEach(function(i){if(au.fix[i.id]!=null)i.tgt=au.fix[i.id]});
+    save();initUI();
+    toast("已改成合計 100%(比例與引擎原本在用的相同)");
+    log("目標配置修正為合計 100%");
+  };
 }
 function initUI(){
-  $("cfgW").value=S.worker; $("cfgCap").value=S.cap?S.cap/10000:""; $("cfgCcy").value=S.ccy||"TWD";
+  $("cfgW").value=S.worker;
   $("cashTWD").value=((S.cashTWD||0)/10000).toFixed(1); $("cashUSD").value=S.cashUSD||0;
   renderUnits();
   var ib="";
@@ -607,7 +648,7 @@ function initUI(){
     ib+='<div class="instrow">'
       +'<input data-if="id" data-ix="'+ix+'" value="'+esc(i.id)+'" placeholder="代碼">'
       +'<input data-if="name" data-ix="'+ix+'" value="'+esc(i.name)+'" placeholder="名稱">'
-      +'<input data-if="tgt" data-ix="'+ix+'" type="number" value="'+Math.round((i.tgt||0)*100)+'" placeholder="%">'
+      +'<input data-if="tgt" data-ix="'+ix+'" type="number" step="0.1" value="'+(+((i.tgt||0)*100).toFixed(1))+'" placeholder="%">'
       +'<select data-if="pocket" data-ix="'+ix+'"><option value="core"'+(i.pocket==="core"?" selected":"")+'>核心</option><option value="sat"'+(i.pocket!=="core"?" selected":"")+'>衛星</option></select>'
       +'<button class="sec" data-del="'+ix+'">刪除</button></div>';
   });
@@ -634,7 +675,7 @@ function initUI(){
   renderLog();renderWeights();
 }
 function readUI(){
-  S.worker=$("cfgW").value.trim().replace(/\/+$/,"");S.cap=(+$("cfgCap").value||0)*10000;S.ccy=$("cfgCcy").value;
+  S.worker=$("cfgW").value.trim().replace(/\/+$/,"");
   S.cashTWD=Math.round((+$("cashTWD").value||0)*10)*1000;S.cashUSD=+$("cashUSD").value||0;
   document.querySelectorAll("[data-u]").forEach(function(e){S.units[e.dataset.u]=Math.max(0,Math.floor(+e.value||0))});save();
 }
@@ -671,6 +712,17 @@ async function fetchAll(){
 /* 以下皆為共用引擎的薄包裝:把本檔的可變狀態(S / Q)組成引擎要的 ctx */
 function engCtx(){return{inst:INST,units:S.units,cost:S.cost,prem:S.prem,prices:Q.px,fx:Q.fx,
   cashTWD:S.cashTWD,cashUSD:S.cashUSD}}
+/* 「總投入金額」原本要自己填一次,而持倉已經是貼券商庫存貼進來的:
+   同一個數字要人維護兩份,填舊了就把自動分配與四年模擬一起算歪,
+   而且錯得毫無異狀。改成直接用實際組合總值(持股市值 + 現金)。
+   報價缺一檔就回 null:那時候 totals 的 V 是低估值,拿它當總資產
+   會算出偏小的目標股數,等於要你賣掉本來該留的部位。 */
+function capNow(){
+  const t=totals();
+  if(t.miss)return{v:null,why:"有標的抓不到報價,組合總值會算少。請先按「更新」。"};
+  if(!(t.V>0))return{v:null,why:"組合總值是 0。先到設定頁貼上券商庫存,或填入現金。"};
+  return{v:t.V,why:null};
+}
 function pxTWD(i){return EG.priceTWD(i,Q.px,Q.fx)}
 function valTWD(i){return EG.valueTWD(i,S.units,Q.px,Q.fx)}
 function totals(){return EG.totals(engCtx())}
@@ -693,10 +745,18 @@ function render(mutate){
      資料的新鮮度應該直接寫在臉上,不是埋在灰字裡讓人自己算。 */
   const asof=(s.asof&&s.asof.spx)||null;
   const days=asof?EG.staleDays(s,todayTPE()):null;
+  /* 「4 天前」是週末造成的假警報:週五收盤的資料在週二看就是 4 個日曆天,
+     但那段期間只有週一一個交易日,而且那就是最新的收盤價。使用者看到
+     「4 天前」以為資料壞了。閘門仍用日曆天(STALE 是策略參數),
+     這裡只把落後程度換成人看得懂的單位。 */
+  const open=asof?EG.openDaysBehind(s,todayTPE()):null;
   const stamp=$("heroAsof");
   stamp.textContent="資料日期 "+(asof||"—")
-    +(Number.isFinite(days)?(days<=0?" · 今天":" · "+days+" 天前"):"");
-  stamp.className="stamp"+(Number.isFinite(days)&&days>=2?" wn":"");
+    +(Number.isFinite(open)?(open<=0?" · 最新收盤":" · 落後 "+open+" 個交易日"):"");
+  stamp.className="stamp"+(Number.isFinite(open)&&open>=2?" wn":"");
+  stamp.title=Number.isFinite(days)
+    ?"日曆天 "+days+" 天(過期閘門門檻 "+P.STALE+" 天,數的是日曆天)"
+    :"沒有資料日期";
   /* 峰值與分層推進交給引擎。只有在資料完整可信時才推進——
      報價缺失或匯率無效時推進峰值,會把錯誤的低估值記成新峰值。 */
   if(mutate&&!t.miss&&fin(V)&&fin(Q.fx)){
@@ -854,7 +914,7 @@ $("btnCheck").onclick=runCheck;
 $("btnRefresh").onclick=runCheck;
 $("btnAddInst").onclick=function(){INST.push({id:"",name:"",tgt:0.05,src:"tw",pocket:"sat"});save();initUI()};
 $("btnAuto").onclick=async function(){
-  readUI();if(!S.cap){toast("先填投入金額");return}
+  readUI();
   /* 自動分配沒有走 makePlan,所以要自己擋:INV() 為 0 時配股數會是 NaN 並寫進持倉 */
   if(!(INV()>0)){toast("各標的目標權重合計為 0,請先填入權重");return}
   $("btnAuto").disabled=true;
@@ -868,13 +928,15 @@ $("btnAuto").onclick=async function(){
       $("sugBox").innerHTML="<div class='sug block'>"+(sigErr
         ?"市場訊號無效:"+esc(sigErr)+"——無法確認風險狀態,自動分配中止。"
         :"風險旗標亮著。規格:風險期凍結投入——自動分配暫停,等旗標熄滅再來。")+"</div>";
-      document.querySelector('[data-v="today"]').click();
+      go("today");
       log(sigErr?("自動分配中止:"+sigErr):"自動分配被風險閘門擋下");
       $("btnAuto").disabled=false;return;
     }
     const bad=LIVE().filter(function(i){return !fin(Q.px[i.id])});
     if(bad.length||!fin(Q.fx)){toast("報價不完整("+bad.map(function(i){return i.id}).join(",")+"),中止");$("btnAuto").disabled=false;return}
-    const capTWD=S.ccy==="USD"?S.cap*Q.fx:S.cap;
+    const cap=capNow();
+    if(cap.v==null){toast(cap.why);$("btnAuto").disabled=false;return}
+    const capTWD=cap.v;
     const plan0={units:{},cash:0};let spend=0;
     let orders="",same=true;
     for(const i of LIVE()){const pt=pxTWD(i);
@@ -889,11 +951,11 @@ $("btnAuto").onclick=async function(){
         orders+="<div class='sug"+(du<0?" sell":"")+"'>"+esc(i.id)+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))
           +" 股(約 "+fmt(Math.abs(du)*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")<br><span style='color:var(--muted);font-size:12px'>目前 "+fmt(cur)+" → 目標 "+fmt(sh)+" 股</span></div>";}
     }
-    let html="<div class='sug hold'>目標配置已套用(總資產 "+fmt(capTWD)+" TWD)。以下是<b>與目前持倉的差額</b>,請至券商執行;實際成交不同時至設定頁校正:</div>"
+    let html="<div class='sug hold'>依目標配置重分配你現在的 "+fmt(capTWD)+" TWD(持股市值 + 現金)。以下是<b>與目前持倉的差額</b>,請至券商執行;實際成交不同時至設定頁校正:</div>"
       +(same?"<div class='sug hold'>目前持倉已符合目標,無需交易。</div>":orders);
     plan0.cash=capTWD-spend;
-    html+="<div class='sug hold'>目標現金 "+fmt(plan0.cash)+" TWD(約 "+(plan0.cash/capTWD*100).toFixed(1)+"%,定存/貨幣基金)。交易完成後帳戶現金應接近此數;若你尚未實際入金,請先確認總資產確實為 "+fmt(capTWD)+" TWD。</div>";
-    document.querySelector('[data-v="today"]').click();
+    html+="<div class='sug hold'>目標現金 "+fmt(plan0.cash)+" TWD(約 "+(plan0.cash/capTWD*100).toFixed(1)+"%,定存/貨幣基金)。交易完成後帳戶現金應接近此數。</div>";
+    go("today");
     await applyPlan(plan0,"自動分配",html);
   }catch(e){toast("失敗:"+e)}
   $("btnAuto").disabled=false;
@@ -931,11 +993,10 @@ $("btnAdd").onclick=async function(){
   log("加碼試算:"+fmt(add)+" TWD → "+r.orders.length+" 筆");
 };
 $("btnMC").onclick=async function(){
-  /* 兩種前置條件分開判斷:沒填投入金額不該回報成匯率問題 */
-  if(!fin(S.cap)){toast("請先至設定頁填入投入金額");return}
-  if(S.ccy==="USD"&&!fin(Q.fx)){toast("USD 投入需先取得匯率(執行一次月檢)");return}
+  const cap=capNow();
+  if(cap.v==null){toast(cap.why);return}
   let R;try{R=await dRets()}catch(e){toast("回測資料載不到:"+e+"(離線時無法執行)");return}
-  const capTWD=S.ccy==="USD"?S.cap*Q.fx:S.cap;
+  const capTWD=cap.v;
   const paths=5000,H=48,B=12,res=[];
   for(let p=0;p<paths;p++){let v=1,n=0;
     /* 起點上限須為 length-B(含),否則最後 B-1 筆永遠取樣不到 */
@@ -944,10 +1005,21 @@ $("btnMC").onclick=async function(){
     res.push(v);}
   res.sort(function(a,b){return a-b});
   const q=function(x){return res[Math.min(Math.floor(paths*x),paths-1)]};
-  $("mcOut").innerHTML="4 年後("+fmt(paths)+" 路徑,取樣 1990–2026 定案引擎):<br>P5 "+fmt(capTWD*q(.05))+" · 中位 "+fmt(capTWD*q(.5))+" · P95 "+fmt(capTWD*q(.95))+" TWD<br>虧損機率 "+(res.filter(function(x){return x<1}).length/paths*100).toFixed(1)+"%";
+  /* 原本只印三個數字,最該看的那一件事(「最壞大概會少掉多少錢」)
+     還要自己減。拿真錢做決定的人要看的是那個差額。 */
+  const p5=capTWD*q(.05),p50=capTWD*q(.5),p95=capTWD*q(.95);
+  const lose=res.filter(function(x){return x<1}).length/paths*100;
+  $("mcOut").innerHTML="以你現在的 "+fmt(capTWD)+" TWD 出發,4 年後("+fmt(paths)
+    +" 條路徑,取樣 1990–2026):"
+    +"<br>最壞的 5% 剩 <b>"+fmt(p5)+"</b> TWD(少 "+fmt(capTWD-p5)+")"
+    +"<br>中位 <b>"+fmt(p50)+"</b> TWD"
+    +"<br>最好的 5% 到 <b>"+fmt(p95)+"</b> TWD"
+    +"<br>4 年後還是虧的機率 <b>"+lose.toFixed(1)+"%</b>"
+    +"<div class='note' style='margin-top:12px'>這是策略本身的波動,不含你何時進場。"
+    +"看不下去「最壞的 5%」那個數字,就代表投入金額太大。</div>";
   log("MC:capTWD="+fmt(capTWD));
 };
-let PARSED=null;
+let PARSED=null,PZERO=null;
 $("btnParse").onclick=async function(){
   /* 空白的框不是「找不到代碼」:貼圖片進 textarea 不會留下任何文字,
      原本那句話等於在回答一段空字串,訊息沒說錯但完全沒幫到人。 */
@@ -969,8 +1041,10 @@ $("btnParse").onclick=async function(){
       +"請確認複製到的是庫存清單,並且設定頁已經有這些代碼。</div>";return;
   }
   const unsure=PARSED.filter(function(x){return !x.sure}).length;
+  PZERO=null;
   /* 自動比對:差多少、換成錢是多少,不要讓人自己心算 */
   const d=EG.diffHoldings(engCtx(),PARSED);
+  PZERO=d.missing.map(function(m){return m.id});
   const sign=function(n){return (n>0?"+":"")+fmt(n)};
   $("pasteOut").innerHTML="<table class='prev'><thead><tr><th>代碼</th><th>目前股數</th>"
     +"<th>解析股數</th><th>差額</th><th>解析成本</th></tr></thead><tbody>"
@@ -981,18 +1055,25 @@ $("btnParse").onclick=async function(){
       +"</td><td class='"+(c?"wn":"")+"'>"+(c?sign(c.delta):"—")
       +"</td><td"+(x.costSure?"":" class='wn'")+">"
       +(x.cost==null?"—":fmt(x.cost)+(x.costSure?"":" 需確認"))+"</td></tr>"}).join("")
+    /* 會被歸零的也列成一行。那是會動到錢的事,不能只寫在下面那段字裡。 */
+    +d.missing.map(function(m){
+      return "<tr class='gone'><td>"+esc(m.id)+" 未出現</td><td>"+fmt(m.units)
+        +"</td><td>0</td><td>"+fmt(-m.units)+"</td><td>—</td></tr>"}).join("")
     +"</tbody></table>"
     +(d.changed.length
-      ?"<div class='sug'>"+d.changed.length+" 檔股數對不上。套用後持股市值會從 "
+      ?"<div class='sug'>"+d.changed.length+" 檔要改。套用後持股市值會從 "
         +fmt(d.valueFrom)+" 變成 "+fmt(d.valueTo)+"("+sign(Math.round(d.valueDelta))+" TWD)。</div>"
       :"<div class='sug hold'>股數與 App 記的完全一致,不需要更新。</div>")
-    /* 套用只寫入貼上來的代碼,沒提到的會原封不動留著——賣光的部位會變成幽靈 */
+    /* 「持倉就是我貼的」:沒出現的視為已出清。原本是原封不動留著,
+       賣光的部位會變成幽靈,繼續被算進總值、繼續產生下單建議。
+       風險變成反過來的——只貼到半個畫面會把好資料洗掉——所以逐檔
+       指名,並且說清楚下一步。 */
     +(d.missing.length
-      ?"<div class='sug block'>App 記著有持股、但這段文字裡沒出現的:"
+      ?"<div class='sug block'>這段文字裡沒出現、<b>套用後會被歸零</b>的:"
         +d.missing.map(function(m){return esc(m.id)+"("+fmt(m.units)+" 股"
           +(m.value==null?"":",約 "+fmt(m.value))+")"}).join("、")
-        +"。套用只會更新上面列出的代碼,這幾檔維持原樣。"
-        +"如果已經賣掉,請到「手動校正」改成 0;如果只是沒貼到,忽略這句。</div>"
+        +"。貼上的那一份就當成完整庫存。如果券商畫面要捲動、你只貼到一半,"
+        +"請把剩下的一起貼上再套用,不要直接按。</div>"
       :"")
     +(unsure?"<div class='sug block'>有 "+unsure+" 檔無法用「股數 × 現價 ≈ 市值」對上,"
       +"請逐欄核對再套用。</div>":"")
@@ -1019,6 +1100,15 @@ $("btnParse").onclick=async function(){
    只載 eng:代碼(00631L)、股數、市值、損益率全是 ASCII,
    中文名稱根本不需要讀,載中文模型只會多下載十幾 MB。 */
 const TESS_SRC="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js";
+/* 預設的自動分頁會把券商表格切成奇怪的區塊,固定成「一整塊文字」
+   (psm 6)準很多;保留字距讓同一列的數字不會黏成一個 token。
+   白名單把中文與全形符號擋在門外——那些字我們本來就不讀,留著只會
+   讓 0 被認成「〇」、1 被認成「|」這類形狀相近的字。 */
+const TESS_CFG={
+  tessedit_pageseg_mode:"6",
+  preserve_interword_spaces:"1",
+  tessedit_char_whitelist:"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,%-+/() "
+};
 let tessLoading=null;
 function loadTesseract(){
   if(window.Tesseract)return Promise.resolve(window.Tesseract);
@@ -1032,43 +1122,101 @@ function loadTesseract(){
   return tessLoading;
 }
 /* 券商 App 幾乎都是深色底白字,而 Tesseract 期待淺底深字——不反相的話
-   辨識率會掉到幾乎不可用。小圖順便放大,手機截圖的數字本來就很小。 */
-async function prepImage(file){
+   辨識率會掉到幾乎不可用。小圖順便放大,手機截圖的數字本來就很小。
+
+   單一前處理在實測裡很不穩:灰階保留了筆畫的漸層,0 容易被認成 8;
+   二值化把筆畫切乾淨,但對比不足的區塊會整塊消失。兩種各認一次,
+   由下面的 score 挑贏家——決定哪一份比較準的不是我猜,是解析器
+   自己的核對結果。 */
+async function prepVariants(file){
   const bmp=await createImageBitmap(file);
-  const k=bmp.width<1200?Math.min(2,1600/bmp.width):1;
+  /* 放大倍率拉到 3:手機截圖的損益率只有 10–12px 高,Tesseract 在
+     20px 以下掉字很兇。上限 1800px 避免在舊手機上爆記憶體。 */
+  const k=bmp.width<1400?Math.min(3,1800/bmp.width):1;
   const w=Math.round(bmp.width*k),h=Math.round(bmp.height*k);
-  const c=document.createElement("canvas");c.width=w;c.height=h;
-  const g=c.getContext("2d");g.imageSmoothingQuality="high";g.drawImage(bmp,0,0,w,h);
-  const d=g.getImageData(0,0,w,h),p=d.data;
+  const base=document.createElement("canvas");base.width=w;base.height=h;
+  const g=base.getContext("2d");g.imageSmoothingQuality="high";g.drawImage(bmp,0,0,w,h);
+  const src=g.getImageData(0,0,w,h);
   let sum=0,n=0;
-  for(let i=0;i<p.length;i+=4*97){sum+=(p[i]+p[i+1]+p[i+2])/3;n++}
-  if(n&&sum/n<128){
-    for(let i=0;i<p.length;i+=4){p[i]=255-p[i];p[i+1]=255-p[i+1];p[i+2]=255-p[i+2]}
-    g.putImageData(d,0,0);
-  }
-  return c;
+  for(let i=0;i<src.data.length;i+=4*97){sum+=(src.data[i]+src.data[i+1]+src.data[i+2])/3;n++}
+  const dark=!!n&&sum/n<128;
+  const mk=function(fn){
+    const c=document.createElement("canvas");c.width=w;c.height=h;
+    const cg=c.getContext("2d"),d=cg.createImageData(w,h);
+    d.data.set(src.data);fn(d.data);cg.putImageData(d,0,0);return c;
+  };
+  const gray=function(p){
+    for(let i=0;i<p.length;i+=4){
+      const v=(dark?255:0)+(dark?-1:1)*(p[i]*0.299+p[i+1]*0.587+p[i+2]*0.114);
+      p[i]=p[i+1]=p[i+2]=v;
+    }
+  };
+  /* 門檻取灰階的平均值,不是固定數字:券商的深色底有深灰也有純黑,
+     固定門檻在其中一種上會把整張圖洗成一片白。 */
+  const bin=function(p){
+    gray(p);
+    let t=0;for(let i=0;i<p.length;i+=4*31)t+=p[i];
+    t=t/Math.ceil(p.length/(4*31));
+    for(let i=0;i<p.length;i+=4){const v=p[i]<t*0.88?0:255;p[i]=p[i+1]=p[i+2]=v}
+  };
+  return [mk(gray),mk(bin)];
+}
+/* 哪一份辨識得比較準?不要用字數猜。解析器本來就有一道核對:
+   「股數 × 現價 ≈ 市值」對得上的那一列才算 sure,成本能跟損益率
+   互相複核的才算 costSure。那兩個數字就是準度,直接拿來排名。 */
+function ocrScore(text){
+  let r;
+  try{r=EG.parseBrokerPaste(text,INST,Q.px,Q.fx)}catch(e){return{sure:-1,cost:-1,n:-1}}
+  const rows=r.rows.filter(function(x){return x.units!=null});
+  return{
+    sure:rows.filter(function(x){return x.sure}).length,
+    cost:rows.filter(function(x){return x.costSure}).length,
+    n:rows.length
+  };
 }
 async function handleImage(file){
   if(!file)return;
   const out=$("pasteOut");
   out.innerHTML="<div class='sug hold'>正在辨識截圖…第一次要下載辨識引擎(約 5MB),"
-    +"之後瀏覽器會留著。全程在這台裝置上跑,圖片不會送到任何伺服器。</div>";
+    +"之後瀏覽器會留著。同一張圖會用兩種方式各認一次再挑準的那份,"
+    +"大約十幾秒。全程在這台裝置上跑,圖片不會送到任何伺服器。</div>";
   try{
+    /* 評分靠「股數 × 現價 ≈ 市值」,沒有報價就分不出哪一份比較準,
+       兩份都會是 0 分。所以先把價抓回來再辨識。 */
+    if(LIVE().some(function(i){return !fin(Q.px[i.id])})){
+      try{await fetchAll()}catch(e){ }
+    }
     const T=await loadTesseract();
-    const img=await prepImage(file);
+    const imgs=await prepVariants(file);
     const worker=await T.createWorker("eng");
-    let text="";
-    try{text=(await worker.recognize(img)).data.text||""}finally{await worker.terminate()}
-    if(!text.trim())throw new Error("圖片裡沒有認出任何文字");
+    let best=null;
+    try{
+      await worker.setParameters(TESS_CFG);
+      for(let k=0;k<imgs.length;k++){
+        let t="";
+        try{t=(await worker.recognize(imgs[k])).data.text||""}catch(e){continue}
+        /* 修補要在評分之前:代碼對不上的那一列根本不會進解析表,
+           沒修補就等於拿「少了一列」的版本去比分數。 */
+        t=EG.fixOcrCodes(t,INST);
+        const sc=ocrScore(t);
+        const win=!best||sc.sure>best.sc.sure
+          ||(sc.sure===best.sc.sure&&sc.cost>best.sc.cost)
+          ||(sc.sure===best.sc.sure&&sc.cost===best.sc.cost&&sc.n>best.sc.n);
+        if(win)best={t:t,sc:sc,k:k};
+      }
+    }finally{await worker.terminate()}
+    if(!best||!best.t.trim())throw new Error("圖片裡沒有認出任何文字");
+    let text=best.t;
+    log("截圖辨識:第 "+(best.k+1)+" 種前處理勝出(對上 "+best.sc.sure+"/"+best.sc.n+" 列)");
     /* Tesseract 把代碼結尾的 L 認成 1 的機率極高(00647L → 006471),而台股
        槓桿 ETF 每一檔都以 L 結尾——實測三檔裡有一檔中招,那一列會整個消失:
        代碼對不上就不進解析表,也不會被列進「設定頁沒有的代碼」。無聲消失
        比認錯更糟,因為畫面上沒有任何線索。修完的文字放回輸入框讓你看見。
        只有 OCR 走這一條:打字打錯的 006471 不該被悄悄改成 00647L。 */
-    text=EG.fixOcrCodes(text,INST);
     $("pasteBox").value=text;
     await $("btnParse").onclick();
-    out.insertAdjacentHTML("afterbegin","<div class='sug hold'>以上是從截圖認出來的。"
+    out.insertAdjacentHTML("afterbegin","<div class='sug hold'>以上是從截圖認出來的"
+      +"("+best.sc.n+" 列,其中 "+best.sc.sure+" 列用「股數 × 現價 ≈ 市值」對上了)。"
       +"認錯的數字可以直接在上面那個框裡改,改完再按一次「解析」。</div>");
     log("由截圖辨識出文字("+text.trim().length+" 字)");
   }catch(e){
@@ -1100,10 +1248,29 @@ async function applyParsed(){
     S.units[x.id]=Math.max(0,Math.floor(x.units));
     if(x.cost!=null)S.cost[x.id]=Math.max(0,Math.round(x.cost));
   });
-  save();initUI();$("pasteBox").value="";$("pasteOut").innerHTML="";PARSED=null;
-  toast("持股與成本已更新");
-  log("由券商庫存更新持股與成本");
+  /* 貼上的那一份就是完整庫存。沒出現的歸零——預覽表已經把每一檔
+     逐行列出來,所以這不是無聲的刪除。成本一起清掉,否則下一次
+     買回來時會沿用上一輪的成本,未實現損益從此是假的。 */
+  (PZERO||[]).forEach(function(id){S.units[id]=0;delete S.cost[id]});
+  const nz=(PZERO||[]).length;
+  save();initUI();$("pasteBox").value="";$("pasteOut").innerHTML="";PARSED=null;PZERO=null;
+  toast(nz?("持股已更新,"+nz+" 檔歸零"):"持股與成本已更新");
+  log("由券商庫存更新持股與成本"+(nz?("("+nz+" 檔歸零)"):""));
   await runCheck();
+  /* 歸零之後組合總值掉下來,峰值只會往上不會往下——App 會看到一段
+     市場並不存在的回撤,而回撤決定分批抄底:實測兩檔歸零就能讓 dd
+     從 0% 變成 -13.5%,-30% 就開始建議加碼。
+
+     賣掉的錢通常還在帳戶裡,填上現金總值就回來了;真的轉走才該重設
+     峰值。只有本人知道是哪一種,不替他猜,但一定要講。 */
+  if(nz){
+    $("sugBox").insertAdjacentHTML("afterbegin",
+      "<div class='sug block'>剛才有 "+nz+" 檔歸零,組合總值跟著掉了,"
+      +"目前距最高點 "+$("heroDd").textContent+"。<b>那不一定是市場下跌。</b>"
+      +"如果那幾檔是賣掉的、錢還在帳戶裡,請到設定頁的「手動校正」把現金填上;"
+      +"錢已經轉出去了,才到「備份與進階」按「重設峰值 / 分層」。"
+      +"兩件都不做的話,App 會把這段當成回撤,並據此建議分批加碼。</div>");
+  }
 }
 $("btnExport").onclick=function(){
   const a=document.createElement("a");

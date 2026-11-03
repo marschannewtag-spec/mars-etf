@@ -843,6 +843,52 @@
     return { rows: rows, unknown: unknown };
   }
 
+  /**
+   * 比對「App 記的持股」與「券商貼上來的持股」。
+   *
+   * 兩件事情必須講出來:
+   *   1. 哪幾檔的股數對不上、差多少、換成錢是多少——不要讓人自己心算
+   *   2. App 記著有持股、但這段文字裡沒提到的那幾檔
+   *
+   * 第 2 點是個陷阱:套用只會寫入貼上來的代碼,沒提到的會原封不動留著。
+   * 賣光的部位於是變成幽靈,繼續被算進總值、繼續產生下單建議。
+   * 不自動歸零——券商畫面會捲動,貼上來的可能只是一部分,
+   * 把沒看到的當成「已賣出」會把對的資料洗掉。只負責指名。
+   *
+   * @param ctx  {inst, units, prices, fx}
+   * @param rows parseBrokerPaste 的 rows
+   * @returns {changed, missing, valueFrom, valueTo, valueDelta}
+   */
+  function diffHoldings(ctx, rows) {
+    var units = ctx.units || {};
+    var byId = {};
+    (rows || []).forEach(function (r) {
+      if (r && r.id != null && r.units != null) byId[r.id] = r;
+    });
+    var changed = [], missing = [], from = 0, to = 0;
+    live(ctx.inst).forEach(function (i) {
+      var pt = priceTWD(i, ctx.prices, ctx.fx);
+      var cur = (+units[i.id] || 0);
+      var row = byId[i.id];
+      /* 沒被提到的維持原值——這正是 applyParsed 會做的事 */
+      var next = row ? Math.max(0, Math.floor(row.units)) : cur;
+      if (pt != null) { from += cur * pt; to += next * pt; }
+      if (row && next !== cur) {
+        changed.push({
+          id: i.id, from: cur, to: next, delta: next - cur,
+          valueDelta: pt == null ? null : (next - cur) * pt
+        });
+      }
+      if (!row && cur > 0) {
+        missing.push({ id: i.id, units: cur, value: pt == null ? null : cur * pt });
+      }
+    });
+    return {
+      changed: changed, missing: missing,
+      valueFrom: from, valueTo: to, valueDelta: to - from
+    };
+  }
+
   /** 目標權重合計是否為 1(現金 + 各標的) */
   function weightsSumToOne(inst, tc) {
     var s = tc;
@@ -860,7 +906,7 @@
     allocateCash: allocateCash, parseBrokerPaste: parseBrokerPaste,
     tierTarget: tierTarget, advanceTier: advanceTier, computeState: computeState,
     validateSignal: validateSignal, derivedRisk: derivedRisk, riskAgrees: riskAgrees,
-    validateImport: validateImport, staleDays: staleDays,
+    validateImport: validateImport, staleDays: staleDays, diffHoldings: diffHoldings,
     tripwireArmed: tripwireArmed, gateReasons: gateReasons, cashTWDAfter: cashTWDAfter,
     makePlan: makePlan, checkInvariants: checkInvariants
   };

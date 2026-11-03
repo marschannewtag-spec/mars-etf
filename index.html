@@ -893,6 +893,14 @@ async function runCheck(){
       log("月檢中止:"+blockers.join(" / "));return;
     }
     const st=render(true);
+    /* 一毛錢都沒有的時候 makePlan 會回「整數化後無需交易」——技術上沒錯,
+       但對第一次打開的人是死路:沒說少了什麼,也沒說去哪補。開機那條路
+       早就有「還沒有持股」,按鈕這條路沒有,同一個狀態兩種說法。 */
+    if(!(st.V>0)){
+      setVerdict("還沒有持股","到「設定」把券商庫存貼上來,或手動填入持有數,這頁就會告訴你這個月要不要動。");
+      $("sugBox").innerHTML="";
+      log("月檢:組合是空的,沒有可檢查的持倉");return;
+    }
     const plan=makePlan(st);
     let html="";
     if(plan.hold){

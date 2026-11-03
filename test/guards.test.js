@@ -1377,6 +1377,24 @@ describe("防線 · OCR 代碼修補", () => {
   });
 });
 
+describe("防線 · 空組合不可被講成「本月無動作」", () => {
+  it("按鈕那條路也要說「還沒有持股」", (a) => {
+    /* 一毛錢都沒有時 makePlan 回「整數化後無需交易」——技術上沒錯,
+       對第一次打開的人卻是死路。開機那條路早就這樣講了,兩條路不可
+       對同一個狀態有兩種說法。 */
+    const html = readHtml();
+    const rc = html.slice(html.indexOf("async function runCheck()"),
+      html.indexOf('$("btnCheck").onclick=runCheck'));
+    a.match(rc, /還沒有持股/, "按鈕那條路沒有這句");
+    /* indexOf 回 -1 時「-1 < 任何數」恆真——擋下那一行被拿掉,
+       這道測試會若無其事地綠。先確認它真的在 */
+    const iv = rc.indexOf("if(!(st.V>0))");
+    a.ok(iv >= 0, "空組合沒有被擋下,會走進 makePlan");
+    a.ok(iv < rc.indexOf("makePlan(st)"),
+      "要在 makePlan 之前擋下,否則拿到的是「無需交易」");
+  });
+});
+
 describe("防線 · 總資產只有一份", () => {
   it("設定頁不可再有「總投入金額」欄位", (a) => {
     /* 持倉已經是貼券商庫存貼進來的。同一個數字要人維護兩份,填舊了就

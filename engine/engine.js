@@ -148,7 +148,10 @@
   ─────────────────────────────────────────────────────────────── */
 
   /* 互混是雙向的:OCR 可能把 1 看成 l,也可能把 L 看成 1,所以用群組不用對照表 */
-  var OCR_GROUPS = ["1lI|L", "0OoDQ", "5S", "8B", "2Z", "6G", "9g"];
+  /* 「.」跟 L 同一組是實測逼出來的:合成截圖裡 00647L 被認成 00647.,
+     而代碼對不上的那一列會整列消失——現在「貼上的就是完整庫存」,
+     消失等於那個部位被歸零。句點只跟豎筆那一組混,不跟數字混。 */
+  var OCR_GROUPS = ["1lI|L.", "0OoDQ", "5S", "8B", "2Z", "6G", "9g"];
 
   function sameOcrGroup(a, b) {
     for (var i = 0; i < OCR_GROUPS.length; i++) {
@@ -167,7 +170,11 @@
     var ids = (inst || []).map(function (i) { return String(i && i.id); })
       .filter(function (x) { return /^[0-9A-Za-z]{3,10}$/.test(x); });
     if (!ids.length) return String(text == null ? "" : text);
-    return String(text == null ? "" : text).replace(/[0-9A-Za-z|]{3,10}/g, function (tok) {
+    /* token 要含「.」,否則 00647. 會在句點處斷成 00647(長度 5),
+       跟長度 6 的代碼永遠對不上,修補根本輪不到上場。
+       只准換一個字元、且必須唯一命中,所以 184.85 這種價格不會被
+       改成代碼——跟任何代碼都差超過一個字元。 */
+    return String(text == null ? "" : text).replace(/[0-9A-Za-z|.]{3,10}/g, function (tok) {
       if (ids.indexOf(tok) >= 0) return tok;
       var hit = null;
       for (var n = 0; n < ids.length; n++) {
@@ -369,6 +376,32 @@
     if (!s || !s.asof || !s.asof.spx) return Infinity;
     var d = Math.floor((Date.parse(today) - Date.parse(s.asof.spx)) / 864e5);
     return Number.isFinite(d) ? d : Infinity;
+  }
+
+  /**
+   * 市場資料落後幾個「交易日」。
+   *
+   * staleDays 數的是日曆天,週末會把一個交易日的落後講成四天:
+   * 週五收盤的資料在週二看是「4 天前」,但那段期間只有週一一個交易日。
+   * 使用者看到「4 天前」會以為資料壞了,實際上是最新的收盤價。
+   *
+   * 閘門仍用日曆天——STALE 是策略參數,不在這裡改。這個只負責把
+   * 落後程度換成人看得懂的單位。
+   *
+   * shortcut: 不含美股假日表,國定假日會多算一天;要更準需要假日資料來源。
+   */
+  function openDaysBehind(s, today) {
+    if (!s || !s.asof || !s.asof.spx) return Infinity;
+    var a = Date.parse(s.asof.spx), t = Date.parse(today);
+    if (!Number.isFinite(a) || !Number.isFinite(t)) return Infinity;
+    if (t - a > 366 * 864e5) return Infinity; /* 超過一年不必逐日數 */
+    /* 資料比今天新時迴圈一次都不跑,自然回 0——不另外加一道判斷 */
+    var n = 0;
+    for (var d = a + 864e5; d < t; d += 864e5) {
+      var w = new Date(d).getUTCDay();
+      if (w !== 0 && w !== 6) n++;
+    }
+    return n;
   }
 
   /**
@@ -742,6 +775,17 @@
         .filter(function (n) { return Number.isFinite(n); });
     }
 
+    /* 帶小數點的數字,也就是價格。損益率同樣是小數,但它後面跟著 %——
+       排除掉,否則 -4.76 會被當成一檔 4.76 元的股票。 */
+    function decs(t) {
+      var out = [];
+      String(t).replace(/(-?\d[\d,]*\.\d+)\s*(%?)/g, function (all, n, pc) {
+        if (!pc) out.push(+n.replace(/,/g, ""));
+        return all;
+      });
+      return out;
+    }
+
     var rows = marks.map(function (m, k) {
       var id = m.i.id;
       var end = (k + 1 < marks.length) ? marks[k + 1].at : src.length;
@@ -764,6 +808,32 @@
         if (best) { units = best.n; sure = true; }
       }
       if (units === null && cands.length) units = cands[cands.length - 1];
+
+      /* ── 成本:買入價 × 股數 ───────────────────────────────────
+         券商畫面上就印著「買入價」與「目前價」,成本根本不必靠符號猜:
+
+           目前價 ≈ 市值 ÷ 股數  ← 認得出來
+           買入價 = 這一列另一個同量級的小數
+           成本   = 買入價 × 股數,賺賠由兩個價格的大小直接決定
+
+         同量級的小數不只一個時就放棄,交給下面的三數互推——
+         猜錯價格會把成本整個算歪,寧可退回有把握的那條路。 */
+      var costByPx = null;
+      if (isPos(value) && isPos(units)) {
+        var nowPx = value / units;
+        var ds = decs(before + " " + after);
+        var best2 = null;
+        ds.forEach(function (n, k) {
+          var e = Math.abs(n - nowPx) / nowPx;
+          if (e <= 0.02 && (best2 === null || e < best2.e)) best2 = { e: e, k: k };
+        });
+        if (best2) {
+          var others = ds.filter(function (n, k) {
+            return k !== best2.k && n > nowPx / 3 && n < nowPx * 3;
+          });
+          if (others.length === 1) costByPx = others[0] * units;
+        }
+      }
 
       /* ── 符號 ──────────────────────────────────────────────────
          損益率的負號在截圖辨識時很容易掉:實測一份六列的券商庫存,
@@ -809,6 +879,16 @@
           }
         }
         pnlPct = cost > value ? -rate : rate;
+      }
+
+      /* 買入價算得出來就用它:那是畫面上印的數字,不是推論。
+         兩條路都走得通時互相複核——差超過 2 個百分點就是有一邊認錯了,
+         不可宣稱確定。 */
+      if (costByPx != null) {
+        var rPx = (value - costByPx) / costByPx;
+        costSure = rate == null || Math.abs(Math.abs(rPx) - rate) <= 0.02;
+        cost = costByPx;
+        pnlPct = rPx;
       }
       return {
         id: id, units: units, value: isPos(value) ? value : null,
@@ -870,10 +950,13 @@
       var pt = priceTWD(i, ctx.prices, ctx.fx);
       var cur = (+units[i.id] || 0);
       var row = byId[i.id];
-      /* 沒被提到的維持原值——這正是 applyParsed 會做的事 */
-      var next = row ? Math.max(0, Math.floor(row.units)) : cur;
+      /* 貼上的那一份就是完整庫存:沒被提到的視為已出清。applyParsed 會
+         寫 0,這裡算的市值必須跟那件事一致,否則總結句講的是另一套假設。
+         風險是只貼到半個畫面,所以 missing 仍然逐檔指名,讓人在按下
+         「套用」之前就看見哪幾檔會被歸零。 */
+      var next = row ? Math.max(0, Math.floor(row.units)) : 0;
       if (pt != null) { from += cur * pt; to += next * pt; }
-      if (row && next !== cur) {
+      if (next !== cur) {
         changed.push({
           id: i.id, from: cur, to: next, delta: next - cur,
           valueDelta: pt == null ? null : (next - cur) * pt
@@ -887,6 +970,57 @@
       changed: changed, missing: missing,
       valueFrom: from, valueTo: to, valueDelta: to - from
     };
+  }
+
+  /**
+   * 目標配置體檢。
+   *
+   * 設定頁填的是「相對權重」,引擎一律正規化,所以合計不是 100 也不會
+   * 算錯——但畫面上的數字跟引擎實際用的不一樣,人是照畫面做決定的。
+   * 填 30/15/10/10/10/5(合計 80)看起來剛好,實際每一檔都被放大 1.25 倍。
+   *
+   * 另外兩種是真的會咬人的設定錯誤:
+   *   - 目標權重 0 的標的:再平衡會要求把它全部賣出
+   *   - 代碼重複:兩列搶同一個 units,後面那列覆蓋前面那列
+   *
+   * fix 是「填進去就等於 100%」的那組數字(不改變任何決策,只讓畫面
+   * 與引擎對齊)。沒問題時回 null。
+   */
+  function auditWeights(inst, tc) {
+    var list = live(inst), sum = weightSum(inst), issues = [], seen = {}, blank = 0;
+    (Array.isArray(inst) ? inst : []).forEach(function (i) {
+      var id = String((i && i.id) || "").trim();
+      if (!id) { blank++; return; }
+      if (seen[id]) issues.push("代碼 " + id + " 重複出現,後面那列會覆蓋前面那列");
+      seen[id] = true;
+    });
+    if (blank) issues.push("有 " + blank + " 列沒有填代碼,不會被算進任何配置");
+    if (!list.length) issues.push("還沒有任何標的");
+    list.forEach(function (i) {
+      if (!(+i.tgt > 0)) issues.push(i.id + " 的目標權重是 0,再平衡會要求把它全部賣出");
+    });
+    var shown = Math.round((sum + tc) * 1e6) / 1e6, fix = null;
+    if (list.length && sum > 0 && Math.abs(shown - 1) > 5e-4) {
+      /* 修正值取到 0.1 個百分點,餘數給小數部分最大的那幾檔(最大餘數法)。
+         直接寫正規化後的原值會留下 28.235294…%,設定頁顯示不下;各自
+         四捨五入又會讓六檔差 0.05% 加起來還是不等於 100%,按了修正
+         畫面上仍是紅字。 */
+      var U = 1e-3, floor = {}, rem = [], tot = 0;
+      list.forEach(function (i) {
+        var exact = (1 - tc) * (+i.tgt || 0) / sum / U;
+        var q = Math.floor(exact + 1e-9);
+        floor[i.id] = q; tot += q;
+        rem.push({ id: i.id, r: exact - q });
+      });
+      rem.sort(function (a, b) { return b.r - a.r; });
+      var need = Math.round((1 - tc) / U) - tot;
+      for (var n = 0; n < need && n < rem.length; n++) floor[rem[n].id]++;
+      fix = {};
+      list.forEach(function (i) { fix[i.id] = floor[i.id] * U; });
+      issues.push("各標的填的合計是 " + (sum * 100).toFixed(1) + "%,加現金 "
+        + (tc * 100).toFixed(0) + "% 等於 " + (shown * 100).toFixed(1) + "%,不是 100%");
+    }
+    return { sum: sum, total: shown, issues: issues, fix: fix };
   }
 
   /** 目標權重合計是否為 1(現金 + 各標的) */
@@ -907,6 +1041,7 @@
     tierTarget: tierTarget, advanceTier: advanceTier, computeState: computeState,
     validateSignal: validateSignal, derivedRisk: derivedRisk, riskAgrees: riskAgrees,
     validateImport: validateImport, staleDays: staleDays, diffHoldings: diffHoldings,
+    openDaysBehind: openDaysBehind, auditWeights: auditWeights,
     tripwireArmed: tripwireArmed, gateReasons: gateReasons, cashTWDAfter: cashTWDAfter,
     makePlan: makePlan, checkInvariants: checkInvariants
   };

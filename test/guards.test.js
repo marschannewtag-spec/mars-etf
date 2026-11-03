@@ -731,6 +731,75 @@ describe("防線 · 券商庫存貼上", () => {
   });
 });
 
+describe("防線 · 貼上後比對股數", () => {
+  const inst = [
+    { id: "00631L", name: "a", tgt: 0.3, src: "tw", pocket: "core" },
+    { id: "00670L", name: "b", tgt: 0.3, src: "tw", pocket: "core" },
+    { id: "00653L", name: "c", tgt: 0.2, src: "tw", pocket: "sat" },
+    { id: "00640L", name: "d", tgt: 0.2, src: "tw", pocket: "sat" },
+  ];
+  const ctx = {
+    inst: inst, units: { "00631L": 1000, "00670L": 500, "00653L": 300, "00640L": 200 },
+    prices: { "00631L": 100, "00670L": 200, "00653L": 50, "00640L": 10 }, fx: 32.6
+  };
+
+  it("差多少、換成錢是多少都要算出來,不要讓人自己心算", (a) => {
+    const d = E.diffHoldings(ctx, [{ id: "00631L", units: 1500 }, { id: "00670L", units: 500 }]);
+    a.strictEqual(d.changed.length, 1, "只有一檔變了");
+    a.deepStrictEqual(d.changed[0],
+      { id: "00631L", from: 1000, to: 1500, delta: 500, valueDelta: 50000 });
+  });
+
+  it("一模一樣就說一模一樣,不可擠出假的差異", (a) => {
+    const same = inst.map(i => ({ id: i.id, units: ctx.units[i.id] }));
+    a.deepStrictEqual(E.diffHoldings(ctx, same).changed, []);
+    a.strictEqual(E.diffHoldings(ctx, same).valueDelta, 0);
+  });
+
+  it("貼上文字沒提到、但 App 記著有持股的要指名出來", (a) => {
+    /* 套用只寫入貼上來的代碼,沒提到的會原封不動留著:
+       賣光的部位變成幽靈,繼續被算進總值、繼續產生下單建議 */
+    const d = E.diffHoldings(ctx, [{ id: "00631L", units: 1000 }]);
+    a.deepStrictEqual(d.missing.map(m => m.id), ["00670L", "00653L", "00640L"]);
+    a.strictEqual(d.missing[0].units, 500);
+    a.strictEqual(d.missing[0].value, 100000);
+  });
+
+  it("沒被提到的不可當成已賣出——券商畫面會捲動,貼上來的可能只是一部分", (a) => {
+    const d = E.diffHoldings(ctx, [{ id: "00631L", units: 1000 }]);
+    /* 市值維持原樣,不可把沒看到的那三檔算成 0 */
+    a.strictEqual(d.valueTo, d.valueFrom, "沒提到的要維持原值");
+    a.strictEqual(d.changed.length, 0, "沒提到不等於變動");
+  });
+
+  it("股數歸零是合法的變動,要算進去", (a) => {
+    const d = E.diffHoldings(ctx, [{ id: "00653L", units: 0 }]);
+    a.strictEqual(d.changed[0].delta, -300);
+    a.strictEqual(d.changed[0].valueDelta, -15000);
+  });
+
+  it("報價缺失時金額回 null,不可當成 0", (a) => {
+    const noPx = Object.assign({}, ctx, { prices: {} });
+    const d = E.diffHoldings(noPx, [{ id: "00631L", units: 1500 }]);
+    a.strictEqual(d.changed[0].delta, 500, "股數的差還是算得出來");
+    a.strictEqual(d.changed[0].valueDelta, null, "金額算不出來就說算不出來");
+  });
+
+  it("空清單與 null 不可爆掉", (a) => {
+    a.deepStrictEqual(E.diffHoldings(ctx, []).changed, []);
+    a.deepStrictEqual(E.diffHoldings(ctx, null).changed, []);
+    a.strictEqual(E.diffHoldings({ inst: [], units: {} }, null).valueFrom, 0);
+  });
+
+  it("網頁確實接上了,而且講出幽靈持股", (a) => {
+    const html = readHtml();
+    const p = html.slice(html.indexOf('$("btnParse").onclick'), html.indexOf("async function applyParsed"));
+    a.match(p, /EG\.diffHoldings\(engCtx\(\),PARSED\)/, "寫好沒接上,測試照樣全綠");
+    a.match(p, /d\.missing\.length/, "沒被提到的持股必須講出來");
+    a.match(p, /<th>差額<\/th>/, "差額要印成一欄,不要讓人自己減");
+  });
+});
+
 describe("防線 · 損益率的負號掉了", () => {
   /* 截圖辨識常常掉掉負號。虧損被當成獲利算,成本會跑到市值的另一邊,
      而畫面上沒有任何異狀——這是最危險的一種錯:看起來完全正常。

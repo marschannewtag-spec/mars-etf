@@ -969,13 +969,31 @@ $("btnParse").onclick=async function(){
       +"請確認複製到的是庫存清單,並且設定頁已經有這些代碼。</div>";return;
   }
   const unsure=PARSED.filter(function(x){return !x.sure}).length;
+  /* 自動比對:差多少、換成錢是多少,不要讓人自己心算 */
+  const d=EG.diffHoldings(engCtx(),PARSED);
+  const sign=function(n){return (n>0?"+":"")+fmt(n)};
   $("pasteOut").innerHTML="<table class='prev'><thead><tr><th>代碼</th><th>目前股數</th>"
-    +"<th>解析股數</th><th>解析成本</th></tr></thead><tbody>"
-    +PARSED.map(function(x){return "<tr class='"+(x.sure?"":"unsure")+"'><td>"+esc(x.id)
+    +"<th>解析股數</th><th>差額</th><th>解析成本</th></tr></thead><tbody>"
+    +PARSED.map(function(x){
+      const c=d.changed.filter(function(y){return y.id===x.id})[0];
+      return "<tr class='"+(x.sure?"":"unsure")+"'><td>"+esc(x.id)
       +(x.sure?"":" 需確認")+"</td><td>"+fmt(S.units[x.id]||0)+"</td><td>"+fmt(x.units)
+      +"</td><td class='"+(c?"wn":"")+"'>"+(c?sign(c.delta):"—")
       +"</td><td"+(x.costSure?"":" class='wn'")+">"
       +(x.cost==null?"—":fmt(x.cost)+(x.costSure?"":" 需確認"))+"</td></tr>"}).join("")
     +"</tbody></table>"
+    +(d.changed.length
+      ?"<div class='sug'>"+d.changed.length+" 檔股數對不上。套用後持股市值會從 "
+        +fmt(d.valueFrom)+" 變成 "+fmt(d.valueTo)+"("+sign(Math.round(d.valueDelta))+" TWD)。</div>"
+      :"<div class='sug hold'>股數與 App 記的完全一致,不需要更新。</div>")
+    /* 套用只寫入貼上來的代碼,沒提到的會原封不動留著——賣光的部位會變成幽靈 */
+    +(d.missing.length
+      ?"<div class='sug block'>App 記著有持股、但這段文字裡沒出現的:"
+        +d.missing.map(function(m){return esc(m.id)+"("+fmt(m.units)+" 股"
+          +(m.value==null?"":",約 "+fmt(m.value))+")"}).join("、")
+        +"。套用只會更新上面列出的代碼,這幾檔維持原樣。"
+        +"如果已經賣掉,請到「手動校正」改成 0;如果只是沒貼到,忽略這句。</div>"
+      :"")
     +(unsure?"<div class='sug block'>有 "+unsure+" 檔無法用「股數 × 現價 ≈ 市值」對上,"
       +"請逐欄核對再套用。</div>":"")
     /* 損益率的負號在辨識時常常掉,虧損會被算成獲利。引擎用市值、損益金額、

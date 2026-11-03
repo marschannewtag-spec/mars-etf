@@ -731,6 +731,73 @@ describe("防線 · 券商庫存貼上", () => {
   });
 });
 
+describe("防線 · 損益率的負號掉了", () => {
+  /* 截圖辨識常常掉掉負號。虧損被當成獲利算,成本會跑到市值的另一邊,
+     而畫面上沒有任何異狀——這是最危險的一種錯:看起來完全正常。
+     數字全為合成,但「市值 / 損益 / 損益率」三者互相閉合,與真實版面同構。 */
+  const mk = (code, units, avgCost, price) => {
+    const cost = Math.round(units * avgCost), value = Math.round(units * price);
+    const pnl = value - cost, rate = pnl / cost * 100;
+    return {
+      code, units, cost, value,
+      /* 刻意不帶負號——模擬辨識把 "-" 吃掉 */
+      text: "某某正2 " + units.toLocaleString("en") + " " + Math.abs(pnl).toLocaleString("en")
+        + "\n現股 " + code + " " + value.toLocaleString("en") + " " + Math.abs(rate).toFixed(2) + "%"
+    };
+  };
+  const run = (cases) => {
+    const inst = cases.map(c => ({ id: c.code, name: "x", tgt: 0.2, src: "tw", pocket: "core" }));
+    const px = {}; cases.forEach(c => { px[c.code] = c.value / c.units; });
+    const text = ["全部庫存", "股票名稱/類別 股數/市值 損益/損益率"]
+      .concat(cases.map(c => c.text)).join("\n");
+    const out = {};
+    E.parseBrokerPaste(text, inst, px, 32.6).rows.forEach(r => { out[r.id] = r; });
+    return out;
+  };
+
+  it("沒有負號也要算出虧損那一邊的成本", (a) => {
+    const cases = [mk("00631L", 10000, 34.50, 33.75), mk("00670L", 4000, 198.00, 184.40)];
+    const r = run(cases);
+    cases.forEach(c => {
+      a.ok(Math.abs(r[c.code].cost - c.cost) <= 1,
+        c.code + " 成本應為 " + c.cost + ",得到 " + r[c.code].cost);
+      a.ok(r[c.code].pnlPct < 0, c.code + " 應判定為虧損");
+      a.strictEqual(r[c.code].costSure, true, c.code + " 符號判得出來就該說確定");
+    });
+  });
+
+  it("真的是獲利時不可被推成虧損", (a) => {
+    const c = mk("00640L", 1500, 92.00, 100.35);
+    const r = run([c]);
+    a.ok(Math.abs(r["00640L"].cost - c.cost) <= 1, "得到 " + r["00640L"].cost);
+    a.ok(r["00640L"].pnlPct > 0, "應判定為獲利");
+  });
+
+  it("損益率太小時兩種算法幾乎一樣,必須說自己不確定", (a) => {
+    /* 賺賠只差千分之二,符號從數字上判不出來。猜一個然後裝作確定最糟。 */
+    const c = mk("00988A", 20000, 14.33, 14.36);
+    const r = run([c]);
+    a.strictEqual(r["00988A"].costSure, false, "判不出來就不可宣稱確定");
+  });
+
+  it("負號還在的時候直接用,不必反推", (a) => {
+    const inst = [{ id: "00631L", name: "x", tgt: 1, src: "tw", pocket: "core" }];
+    const t = "某某正2 2,000 -627\n現股 00631L 67,500 -0.93%";
+    const r = E.parseBrokerPaste(t, inst, { "00631L": 33.75 }, 32.6).rows[0];
+    a.strictEqual(r.cost, Math.round(67500 / (1 - 0.0093)));
+    a.strictEqual(r.costSure, true);
+  });
+
+  it("網頁要把「成本判不出來」講出來,不可只標股數", (a) => {
+    const html = readHtml();
+    const p = html.slice(html.indexOf('$("btnParse").onclick'), html.indexOf("async function applyParsed"));
+    /* 錨在成本那一格本身:只檢查整段有沒有 costSure,
+       另一處的提示句也會讓它通過,等於沒測到 */
+    a.match(p, /x\.costSure\?"":" 需確認"/, "成本那一格要標出不確定");
+    a.match(p, /判不出是賺還是賠/, "要說出為什麼不確定");
+  });
+});
+
 describe("防線 · 券商庫存貼截圖", () => {
   const ocr = () => {
     const html = readHtml();

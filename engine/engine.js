@@ -751,7 +751,6 @@
 
       var value = nums(after)[0];
       var pm = after.match(/(-?\d+(?:\.\d+)?)\s*%/);
-      var pnlPct = pm ? +pm[1] / 100 : null;
       var pt = priceTWD(m.i, prices, fx);
 
       var units = null, sure = false;
@@ -766,10 +765,55 @@
       }
       if (units === null && cands.length) units = cands[cands.length - 1];
 
-      var cost = (isPos(value) && pnlPct != null && pnlPct > -1) ? value / (1 + pnlPct) : null;
+      /* ── 符號 ──────────────────────────────────────────────────
+         損益率的負號在截圖辨識時很容易掉:實測一份六列的券商庫存,
+         五列虧損的負號全部不見,成本於是被算到市值的另一邊——
+         一檔就差三萬多元,而畫面上沒有任何異狀。
+
+         所以不靠負號。市值、損益金額、損益率三個數字彼此是封閉的:
+
+           虧損 → 成本 = 市值 + |損益| = 市值 / (1 - |損益率|)
+           獲利 → 成本 = 市值 - |損益| = 市值 / (1 + |損益率|)
+
+         兩個解各自推回損益金額,誰比較接近畫面上印的 |損益| 誰就是答案。
+         決定之後用「市值 ± 損益金額」當成本——那是兩個整數,比用四捨五入
+         到小數兩位的損益率精確。
+
+         |損益率| 很小時兩解幾乎重疊,符號從數字上就是判不出來。
+         此時據實回報 costSure:false,由呼叫端逼使用者看過那一列,
+         而不是猜一個然後裝作確定。 */
+      var rate = pm ? Math.abs(+pm[1]) / 100 : null;
+      var cost = null, costSure = false, pnlPct = null;
+      if (isPos(value) && rate != null && rate < 1) {
+        var lose = value / (1 - rate), gain = value / (1 + rate);
+        if (/^-/.test(pm[1])) {
+          cost = lose; costSure = true;            /* 負號還在就直接用 */
+        } else {
+          /* before 裡除了股數以外的那個整數就是損益金額,用 市值×損益率 認出來 */
+          var want = value * rate, pnlAbs = null, pe = Infinity;
+          cands.forEach(function (n) {
+            if (n === units) return;
+            var e = Math.abs(n - want) / (want || 1);
+            if (e < 0.25 && e < pe) { pe = e; pnlAbs = n; }
+          });
+          if (pnlAbs == null) {
+            /* 沒有損益金額可以裁決:維持舊行為(當成獲利),但不可宣稱確定 */
+            cost = gain;
+          } else {
+            /* 比損益率,不是比損益金額:畫面印的就是損益率,拿同一個量來比
+               才不會被四捨五入放大誤差。 */
+            var rL = pnlAbs / (value + pnlAbs);
+            var rG = (value - pnlAbs) > 0 ? pnlAbs / (value - pnlAbs) : Infinity;
+            cost = Math.abs(rL - rate) <= Math.abs(rG - rate) ? value + pnlAbs : value - pnlAbs;
+            costSure = Math.abs(lose - gain) > value * 0.01;
+          }
+        }
+        pnlPct = cost > value ? -rate : rate;
+      }
       return {
         id: id, units: units, value: isPos(value) ? value : null,
-        cost: cost == null ? null : Math.round(cost), pnlPct: pnlPct, sure: sure
+        cost: cost == null ? null : Math.round(cost), pnlPct: pnlPct,
+        sure: sure, costSure: costSure
       };
     });
 

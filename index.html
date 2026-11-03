@@ -689,7 +689,14 @@ function render(mutate){
   pill.className="pill "+((risk||sigErr)?"risk":"ok");
   pill.textContent=sigErr?"市場訊號無效 · 不可依此操作"
     :(risk?"風險期 · 凍結投入,僅允許減碼":"正常期 · 依三層引擎執行");
-  $("heroAsof").textContent="資料日期 "+((s.asof&&s.asof.spx)||"—")+"(過期>4天中止)";
+  /* 原本只印日期,幾天前的要自己換算。月檢是拿真錢做決定,
+     資料的新鮮度應該直接寫在臉上,不是埋在灰字裡讓人自己算。 */
+  const asof=(s.asof&&s.asof.spx)||null;
+  const days=asof?EG.staleDays(s,todayTPE()):null;
+  const stamp=$("heroAsof");
+  stamp.textContent="資料日期 "+(asof||"—")
+    +(Number.isFinite(days)?(days<=0?" · 今天":" · "+days+" 天前"):"");
+  stamp.className="stamp"+(Number.isFinite(days)&&days>=2?" wn":"");
   /* 峰值與分層推進交給引擎。只有在資料完整可信時才推進——
      報價缺失或匯率無效時推進峰值,會把錯誤的低估值記成新峰值。 */
   if(mutate&&!t.miss&&fin(V)&&fin(Q.fx)){
@@ -966,10 +973,17 @@ $("btnParse").onclick=async function(){
     +"<th>解析股數</th><th>解析成本</th></tr></thead><tbody>"
     +PARSED.map(function(x){return "<tr class='"+(x.sure?"":"unsure")+"'><td>"+esc(x.id)
       +(x.sure?"":" 需確認")+"</td><td>"+fmt(S.units[x.id]||0)+"</td><td>"+fmt(x.units)
-      +"</td><td>"+(x.cost==null?"—":fmt(x.cost))+"</td></tr>"}).join("")
+      +"</td><td"+(x.costSure?"":" class='wn'")+">"
+      +(x.cost==null?"—":fmt(x.cost)+(x.costSure?"":" 需確認"))+"</td></tr>"}).join("")
     +"</tbody></table>"
     +(unsure?"<div class='sug block'>有 "+unsure+" 檔無法用「股數 × 現價 ≈ 市值」對上,"
       +"請逐欄核對再套用。</div>":"")
+    /* 損益率的負號在辨識時常常掉,虧損會被算成獲利。引擎用市值、損益金額、
+       損益率三個數字互推符號;損益率很小的時候兩個解幾乎一樣,判不出來。 */
+    +(PARSED.filter(function(x){return x.cost!=null&&!x.costSure}).length
+      ?"<div class='sug block'>有 "+PARSED.filter(function(x){return x.cost!=null&&!x.costSure}).length
+        +" 檔的成本判不出是賺還是賠(損益率太小,兩種算法差不到 1%)。"
+        +"請對照券商的損益欄確認那幾列再套用。</div>":"")
     /* 後果不只是「少算一檔」:總值、各檔權重、再平衡訂單全都建立在不完整的
        組合上。原本只說「不會算進總值」,語氣太輕,也沒告訴人下一步做什麼。 */
     +(r.unknown.length?"<div class='sug block'>貼上的資料裡有設定頁沒有的代碼:"

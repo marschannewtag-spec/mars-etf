@@ -35,11 +35,12 @@
   --pill-warn-bg:#2a2416;--pill-warn-ink:#d9a441;
   --pill-neu-bg:#212023;--pill-neu-ink:#bdbdc0;
   --radius-card:10px;--radius-control:999px;--radius-input:8px;
-  --gap:24px;--pad:32px;--rail:220px;
-  --control-h:44px;
-  /* 一句話結論的字級:這個 App 每個月只回答一個問題,那句話要最大 */
-  --fs-verdict:40px;
-  --fs-title:32px;--fs-section:22px;--fs-kpi:30px;--fs-body:16px;--fs-small:13px;
+  --gap:20px;--pad:24px;--rail:176px;
+  --control-h:40px;
+  /* 一句話結論的字級:這個 App 每個月只回答一個問題,那句話要最大——
+     而「最大」是相對的。其他全部壓下去,它才真的在領。 */
+  --fs-verdict:32px;
+  --fs-title:22px;--fs-section:17px;--fs-kpi:24px;--fs-body:15px;--fs-small:13px;
   --sans:"Public Sans","Noto Sans TC",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
@@ -53,18 +54,18 @@ body{background:var(--ground);color:var(--text);
 .mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 h1{font-size:var(--fs-title);font-weight:700;letter-spacing:-.02em;line-height:1.15}
 h2{font-size:var(--fs-section);font-weight:400;color:var(--muted);line-height:1.2}
-h3{font-size:16px;font-weight:600}
+h3{font-size:15px;font-weight:600}
 a{color:inherit}
 
 /* ── 外殼:桌機側欄 / 手機底欄 ─────────────────────────────── */
 .shell{display:grid;grid-template-columns:var(--rail) 1fr;min-height:100vh}
 nav{display:flex;flex-direction:column;gap:2px;padding:var(--pad) 12px;
   border-right:1px solid var(--border);position:sticky;top:0;height:100vh;align-content:start}
-.mark{display:block;margin:0 8px 28px;line-height:1.25}
-.mark b{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--accent);display:block}
+.mark{display:block;margin:0 8px 22px;line-height:1.25}
+.mark b{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--accent);display:block}
 .mark span{font-size:var(--fs-small);color:var(--muted)}
-nav a{display:block;text-decoration:none;color:var(--muted);font-size:17px;font-weight:500;
-  padding:12px 10px;border-radius:6px;position:relative}
+nav a{display:block;text-decoration:none;color:var(--muted);font-size:15px;font-weight:500;
+  padding:10px;border-radius:6px;position:relative}
 nav a:hover{color:var(--text);background:var(--raised)}
 /* 這個風格的唯一一個動作:選取 = 一條與標籤同寬的 1px 重點色線 */
 nav a.on{color:var(--text)}
@@ -85,7 +86,7 @@ main{padding:var(--pad);min-width:0}
 
 /* ── 面板 ─────────────────────────────────────────────────── */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);
-  padding:24px}
+  padding:20px}
 .card>h2{margin-bottom:16px}
 .stack{display:grid;gap:var(--gap)}
 
@@ -104,9 +105,9 @@ main{padding:var(--pad);min-width:0}
   font-size:var(--fs-small);font-weight:500;background:var(--pill-neu-bg);color:var(--pill-neu-ink)}
 .pill.ok{background:var(--pill-pos-bg);color:var(--pill-pos-ink)}
 .pill.risk{background:var(--pill-neg-bg);color:var(--pill-neg-ink)}
-.big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:34px;font-weight:500;
+.big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:26px;font-weight:500;
   line-height:1.1;letter-spacing:-.02em}
-.big small{display:inline;font-size:16px;color:var(--muted);font-weight:400}
+.big small{display:inline;font-size:13px;color:var(--muted);font-weight:400}
 .big .sep{color:var(--control);font-weight:400;margin:0 2px}
 
 /* ── 分層階梯:這個 App 自己的那個元件 ────────────────────────
@@ -128,13 +129,13 @@ main{padding:var(--pad);min-width:0}
    這個 App 每個月只回答一個問題:「要不要動、動什麼」。
    原本得讀完整張訂單清單才知道答案,結論從來沒被講出來。 */
 .verdictCard{background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--radius-card);padding:32px;margin-bottom:var(--gap)}
+  border-radius:var(--radius-card);padding:24px;margin-bottom:var(--gap)}
 .vhead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:10px}
 .verdict{font-size:var(--fs-verdict);font-weight:700;line-height:1.12;letter-spacing:-.02em}
 .verdict.act{color:var(--accent)}
 .verdict.warn{color:var(--warning)}
 .verdict.bad{color:var(--negative)}
-.verdictSub{color:var(--muted);font-size:17px;line-height:1.5;max-width:60ch}
+.verdictSub{color:var(--muted);font-size:15px;line-height:1.5;max-width:60ch}
 
 /* ── 行動清單 ─────────────────────────────────────────────── */
 #sugBox{display:grid;gap:10px;grid-template-columns:1fr 1fr}
@@ -142,7 +143,7 @@ main{padding:var(--pad);min-width:0}
 #sugBox>.sug.hold,#sugBox>.sug.block,
 #sugBox>div:last-child{grid-column:1 / -1}
 .sug{border-left:2px solid var(--accent);background:var(--raised);font-variant-numeric:tabular-nums;
-  padding:15px 18px;font-size:var(--fs-body);border-radius:0 6px 6px 0}
+  padding:12px 15px;font-size:var(--fs-body);border-radius:0 6px 6px 0}
 .sug.sell{border-left-color:var(--negative)}
 .sug.hold{border-left-color:var(--control);color:var(--muted)}
 .sug.block{border-left-color:var(--warning);color:var(--pill-warn-ink)}
@@ -155,14 +156,14 @@ main{padding:var(--pad);min-width:0}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px}
 .holds{display:grid;gap:var(--gap);grid-template-columns:1fr 1fr;margin-bottom:var(--gap)}
 .hcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);
-  padding:20px 22px}
+  padding:16px 18px}
 .hrow{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.hname{font-weight:600;font-size:17px}
+.hname{font-weight:600;font-size:15px}
 .hname .nm{color:var(--muted);font-size:var(--fs-small);font-weight:400;margin-left:6px}
 .chip{display:inline-block;padding:2px 9px;border-radius:var(--radius-control);
   font-size:12px;background:var(--pill-neu-bg);color:var(--pill-neu-ink);margin-left:8px;font-weight:500}
 .hval{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500;font-size:var(--fs-kpi)}
-.hsub{display:flex;justify-content:space-between;color:var(--muted);font-size:15px;
+.hsub{display:flex;justify-content:space-between;color:var(--muted);font-size:13px;
   font-family:var(--mono);font-variant-numeric:tabular-nums;margin-top:6px}
 /* 進度條:填滿的長度就是真實比例,白刻度是目標 */
 .wtrack{position:relative;height:6px;background:var(--raised);border-radius:3px;margin-top:14px}
@@ -181,11 +182,11 @@ td{padding:12px 0;text-align:right;border-top:1px solid var(--rule);
 th:first-child,td:first-child{text-align:left;font-family:var(--sans)}
 .pos{color:var(--positive)}.neg{color:var(--negative)}.wn{color:var(--warning)}
 input,select,textarea{background:var(--ground);border:1px solid var(--control);color:var(--text);
-  border-radius:var(--radius-input);padding:0 13px;height:48px;width:100%;
+  border-radius:var(--radius-input);padding:0 13px;height:var(--control-h);width:100%;
   font:var(--fs-body)/1 var(--mono);font-variant-numeric:tabular-nums}
 textarea{height:auto;padding:10px 11px;line-height:1.5;resize:vertical}
 /* 解析結果:確認過才寫入,所以先用一張表把「現在 → 解析出來」攤開 */
-.prev{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px}
+.prev{width:100%;border-collapse:collapse;font-size:var(--fs-small);margin-top:14px}
 .prev th{font-size:var(--fs-small);color:var(--muted);font-weight:400;text-align:right;padding:0 0 8px}
 .prev th:first-child{text-align:left}
 .prev td{padding:9px 0;text-align:right;border-top:1px solid var(--rule);
@@ -210,13 +211,13 @@ input:focus-visible,select:focus-visible,button:focus-visible,nav a:focus-visibl
   outline:2px solid var(--accent);outline-offset:2px}
 label{font-size:var(--fs-small);color:var(--muted);display:block;margin:16px 0 8px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.log{font-size:13px;color:var(--muted);padding:9px 0;border-top:1px solid var(--rule);
+.log{font-size:var(--fs-small);color:var(--muted);padding:8px 0;border-top:1px solid var(--rule);
   font-family:var(--mono);font-variant-numeric:tabular-nums}
-.note{font-size:13px;color:var(--muted);margin-top:14px;line-height:1.6;max-width:72ch}
+.note{font-size:var(--fs-small);color:var(--muted);margin-top:12px;line-height:1.6;max-width:72ch}
 code{font-family:var(--mono);background:var(--raised);padding:1px 5px;border-radius:3px}
 .sec-row{display:grid;gap:var(--gap);grid-template-columns:320px 1fr;align-items:start}
-.sec-row>.lab{font-size:13px;color:var(--muted);line-height:1.6}
-.sec-row>.lab b{display:block;font-size:16px;font-weight:600;color:var(--text);margin-bottom:6px}
+.sec-row>.lab{font-size:var(--fs-small);color:var(--muted);line-height:1.6}
+.sec-row>.lab b{display:block;font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px}
 /* 輸入的是「相對權重」,實際佔總資產要除以總和再扣掉現金水位。
    這兩步使用者看不到:填 30 不知道那是 28.2% 還是 30%,
    而這個數字決定每個月的下單張數。所以直接把結果印在表格下面。 */
@@ -234,7 +235,7 @@ code{font-family:var(--mono);background:var(--raised);padding:1px 5px;border-rad
    名稱完全看不到也改不了——實測 390px 時溢出 211px。所以窄的時候拆兩行。 */
 .instrow{display:grid;gap:6px;margin-bottom:6px;
   grid-template-columns:92px minmax(140px,1fr) 62px 76px 56px}
-.instrow button{height:48px;padding:0;font-size:14px}
+.instrow button{height:var(--control-h);padding:0;font-size:var(--fs-small)}
 @media(max-width:1240px){
   /* 兩行之後列內與列間的間距一樣大,六檔標的會糊成一片 */
   .instrow{grid-template-columns:1fr 76px 72px;margin-bottom:16px;
@@ -274,8 +275,8 @@ button.wide{width:100%}
 
 /* ── 手機:側欄收成底欄 ───────────────────────────────────── */
 @media(max-width:900px){
-  :root{--pad:16px;--gap:16px;--control-h:48px;--fs-verdict:30px;--fs-title:26px}
-  .verdictCard{padding:22px}
+  :root{--pad:16px;--gap:16px;--control-h:48px;--fs-verdict:26px;--fs-title:20px}
+  .verdictCard{padding:18px}
   .shell{grid-template-columns:1fr}
   nav{flex-direction:row;position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;
     gap:4px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));
@@ -302,10 +303,24 @@ button.wide{width:100%}
   .strip.snap{grid-template-columns:1fr}
   .strip.snap>div{border-left:0;padding-left:0;border-top:1px solid var(--rule)}
   .strip.snap>div:first-child{border-top:0}
+  /* 標籤在左、數字在右。「標籤疊數字」每格要 110px,四格就是 440px——
+     一個月的結論要捲三屏才看得完。領頭那格留著疊,它是這頁的答案數字。 */
+  .strip.snap>div,.strip.lead>div:nth-child(n+2){
+    display:grid;grid-template-columns:1fr auto;align-items:baseline;
+    column-gap:16px;padding:10px 0}
+  .strip.snap label,.strip.lead>div:nth-child(n+2) label{margin:0}
+  .strip.snap b,.strip.lead>div:nth-child(n+2) b{text-align:right}
+  .strip.snap small,.strip.lead>div:nth-child(n+2) small{
+    grid-column:2;text-align:right;margin-top:2px}
+  /* 標題列的兩顆按鈕併成一排:原本「更新」與「執行月度檢查」各佔一列,
+     資料都還沒出現就先吃掉兩排 */
+  .titlebar .acts{width:100%}
+  .titlebar .acts .stamp{flex:1 0 100%}
+  .titlebar .acts button{flex:1}
   #toast{bottom:88px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-.strip.lead b{font-size:34px}
+.strip.lead b{font-size:26px}
 .card>label:first-child{margin-top:0}
 
 </style></head>
@@ -355,12 +370,12 @@ button.wide{width:100%}
     </div>
     <div class="rungs">
       <span style="left:0">0</span>
-      <span style="left:50%">-30</span>
+      <span style="left:50%">-30 首撥</span>
       <span style="left:66.7%">-40</span>
       <span style="left:83.3%">-50</span>
       <span style="left:100%">-60</span>
     </div>
-    <div class="note">綠線是離最高點跌了多少。跌到 -30% 開始分批加碼,-40%、-50% 各再加一次。</div>
+    <div class="note">綠線是離最高點的跌幅。-40%、-50% 各再加碼一次。</div>
   </div>
 
   <div class="card">
@@ -369,7 +384,7 @@ button.wide{width:100%}
       <div><label>SPX / 12 月均線</label><b id="vSMA">—</b><small id="vSMAsub">—</small></div>
       <div><label>VIX(門檻 32)</label><b id="vVIX">—</b><small id="vVIXsub">—</small></div>
       <div><label>美元兌台幣</label><b id="vFX">—</b><small>複委託換匯</small></div>
-      <div><label>00653L 出場扳機</label><b id="vTrip" style="font-size:var(--fs-body)">—</b><small id="vTripSub">Brent&gt;90 且 INR&gt;96</small></div>
+      <div><label>00653L 扳機</label><b id="vTrip" style="font-size:var(--fs-body)">—</b><small id="vTripSub">Brent&gt;90 且 INR&gt;96</small></div>
     </div>
   </div>
 </div>
@@ -957,7 +972,7 @@ $("btnAuto").onclick=async function(){
       plan0.units[i.id]=sh;spend+=sh*pt;
       if(du){same=false;
         orders+="<div class='sug"+(du<0?" sell":"")+"'>"+esc(i.id)+(du>0?" 買入 ":" 賣出 ")+fmt(Math.abs(du))
-          +" 股(約 "+fmt(Math.abs(du)*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")<br><span style='color:var(--muted);font-size:12px'>目前 "+fmt(cur)+" → 目標 "+fmt(sh)+" 股</span></div>";}
+          +" 股(約 "+fmt(Math.abs(du)*pt)+" TWD @ "+fmt(Q.px[i.id],2)+")<br><span style='color:var(--muted);font-size:var(--fs-small)'>目前 "+fmt(cur)+" → 目標 "+fmt(sh)+" 股</span></div>";}
     }
     let html="<div class='sug hold'>依目標配置重分配你現在的 "+fmt(capTWD)+" TWD(持股市值 + 現金)。以下是<b>與目前持倉的差額</b>,請至券商執行;實際成交不同時至設定頁校正:</div>"
       +(same?"<div class='sug hold'>目前持倉已符合目標,無需交易。</div>":orders);

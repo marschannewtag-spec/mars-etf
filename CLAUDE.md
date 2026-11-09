@@ -26,6 +26,11 @@ test/
   contract.test.js  Worker 端點的結構與範圍(需網路)
   legacy.js         在 vm 沙箱載入凍結的舊實作當參照
   fixtures/         凍結的參照原始碼(自動產生)
+tools/
+  serve.js          本機靜態伺服器。file:// 直接開會被 CORS 擋掉 fetch
+.claude/
+  launch.json       Claude Code 的預覽設定,指向 tools/serve.js
+docs/               歷次稽核與 UI 檢討紀錄
 ```
 
 ## 指令
@@ -35,6 +40,7 @@ node test/run.js              # 離線測試(黃金案例、不變量、平價)
 node test/run.js --contract   # 加跑資料契約測試,會實際打 Worker
 node test/run.js --only 平價   # 只跑名稱含關鍵字的 suite
 node engine/dump-params.js    # 參數改動後重新產生 engine.json
+node tools/serve.js . 8777    # 本機開頁面 → http://localhost:8777
 ```
 
 改動引擎後 `node test/run.js` 必須全綠才可部署。
@@ -43,7 +49,7 @@ node engine/dump-params.js    # 參數改動後重新產生 engine.json
 
 `.github/workflows/ci.yml` 在每次 push(心跳除外)與 PR 執行四道關卡:
 
-1. 引擎測試(274 項離線)
+1. 引擎測試(275 項離線)
 2. `engine.json` 與 `engine.js` 的 PARAMS 同步檢查
 3. `index.html` 內嵌 script 語法檢查
 4. 確認 index.html 仍引用共用引擎、`.nojekyll` 仍在

@@ -391,6 +391,32 @@ describe("防線 · 00653L 扳機門檻只能有一份", () => {
     a.strictEqual(E.tripwireArmed({ tripwire: { brent: "", usdinr: 97 } }), null);
   });
 
+  it("遲滯:觸發後要跌破解除門檻才解除", (a) => {
+    const h = (was, brent, usdinr, armed) => E.tripwireHeld(was, { tripwire: { brent, usdinr, armed } });
+    a.ok(P.TRIP_BRENT_OFF < P.TRIP_BRENT && P.TRIP_USDINR_OFF < P.TRIP_USDINR,
+      "解除門檻必須低於觸發門檻,否則遲滯是反的");
+    a.strictEqual(h(false, 92, 97, true), true, "觸發");
+    a.strictEqual(h(false, 92, 95.8, false), false, "從未觸發:在緩衝帶內也不算觸發");
+    a.strictEqual(h(true, 92, 95.8, false), true, "已觸發:掉回 96 下但仍在緩衝帶內,維持");
+    a.strictEqual(h(true, 92, P.TRIP_USDINR_OFF, false), true, "剛好等於解除門檻仍維持(跌破才解除)");
+    a.strictEqual(h(true, 92, 95.4, false), false, "INR 跌破解除門檻:解除");
+    a.strictEqual(h(true, 87.9, 97, false), false, "Brent 跌破解除門檻:解除(任一條件即可)");
+  });
+
+  it("遲滯:觸發以 Worker 為準,資料不足回 null", (a) => {
+    a.strictEqual(E.tripwireHeld(false, { tripwire: { brent: 92, usdinr: 97 } }), true,
+      "armed 不是布林時退回本地重算");
+    a.strictEqual(E.tripwireHeld(true, {}), null, "沒有扳機資料不可當成解除");
+    a.strictEqual(E.tripwireHeld(true, { tripwire: { brent: null, usdinr: 97, armed: false } }), null);
+  });
+
+  it("網頁的扳機燈號由引擎的 tripwireHeld 決定", (a) => {
+    const html = readHtml();
+    a.match(html, /EG\.tripwireHeld\(/, "網頁不得自己寫遲滯規則");
+    a.match(html, /P\.TRIP_USDINR_OFF/, "解除門檻文字改讀 PARAMS");
+    a.ok(!/Brent<\s*\d/.test(html) && !/INR<\s*\d/.test(html), "網頁不得寫死解除門檻");
+  });
+
   it("網頁與契約測試都不得再寫死 90 / 96", (a) => {
     const html = readHtml();
     a.ok(!/Brent>90/.test(html), "網頁文字必須改讀 PARAMS");

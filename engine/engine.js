@@ -50,6 +50,14 @@
        兩邊是否一致由 contract.test.js 以 tripwireArmed 複核,不一致即紅燈。 */
     TRIP_BRENT: 90,
     TRIP_USDINR: 96,
+    /* 扳機的解除門檻(遲滯)。觸發仍是兩條件同時嚴格大於上面那組;
+       觸發之後要任一條件跌破這組才算解除,而不是一掉回 96 就解除。
+       2026-10 INR 在 96 上下來回(10-09 96.72 → 10-12 95.76),
+       沒有遲滯就是一天觸發、隔幾天解除、再一天又觸發。
+       遲滯只在本 repo 這一側(監控與網頁),Worker 的 armed 仍是無狀態的,
+       contract.test.js 照舊以 tripwireArmed 複核觸發條件。 */
+    TRIP_BRENT_OFF: 88,
+    TRIP_USDINR_OFF: 95.5,
     /* 再平衡下單門檻:變動金額低於總值這個比例就不動(避免碎單) */
     MIN_TRADE_FRACTION: 0.005,
     /* 現金偏離判定時給的容差,對應 makePlan 的 cf < DEF - EPS */
@@ -324,6 +332,27 @@
     var t = s && s.tripwire;
     if (!t || !numOk(t.brent) || !numOk(t.usdinr)) return null;
     return +t.brent > P.TRIP_BRENT && +t.usdinr > P.TRIP_USDINR;
+  }
+
+  /**
+   * 含遲滯的扳機狀態。wasArmed 是上一次的結果(每日監控的心跳)。
+   *
+   * 觸發:以 Worker 的 armed 為準(它是權威計算);armed 不是布林時退回本地重算。
+   * 維持:先前已觸發、且 Brent ≥ TRIP_BRENT_OFF 且 INR ≥ TRIP_USDINR_OFF。
+   * 也就是任一條件「跌破」解除門檻才解除。
+   *
+   * 回傳 null 代表資料不足以判斷——呼叫端必須保留前次狀態,不可當成解除:
+   * 拿不到資料就把扳機關掉,等於在最需要它的時候把它關掉。
+   */
+  function tripwireHeld(wasArmed, s, P) {
+    P = P || PARAMS;
+    var t = s && s.tripwire;
+    if (!t) return null;
+    var entry = typeof t.armed === "boolean" ? t.armed : tripwireArmed(s, P);
+    if (entry === true) return true;
+    if (!wasArmed) return entry;
+    if (!numOk(t.brent) || !numOk(t.usdinr)) return null;
+    return +t.brent >= P.TRIP_BRENT_OFF && +t.usdinr >= P.TRIP_USDINR_OFF;
   }
 
   /**
@@ -1042,7 +1071,7 @@
     validateSignal: validateSignal, derivedRisk: derivedRisk, riskAgrees: riskAgrees,
     validateImport: validateImport, staleDays: staleDays, diffHoldings: diffHoldings,
     openDaysBehind: openDaysBehind, auditWeights: auditWeights,
-    tripwireArmed: tripwireArmed, gateReasons: gateReasons, cashTWDAfter: cashTWDAfter,
+    tripwireArmed: tripwireArmed, tripwireHeld: tripwireHeld, gateReasons: gateReasons, cashTWDAfter: cashTWDAfter,
     makePlan: makePlan, checkInvariants: checkInvariants
   };
 });

@@ -104,6 +104,11 @@ function evaluate(prev, obs, today) {
     return { alerts, closes, state: prev };
   }
 
+  /* 扳機含遲滯:心跳裡的 tripwireArmed 是「維持中的狀態」,不是 Worker 當天的原始 armed。
+     資料不足以判斷(null)時保留前次狀態,不可當成解除。 */
+  const wasArmed = !!(prev && prev.tripwireArmed);
+  const held = E.tripwireHeld(wasArmed, sig);
+
   const state = {
     checkedAt: obs.at,
     asof: sig.asof.spx,
@@ -113,7 +118,7 @@ function evaluate(prev, obs, today) {
     spxBelow: !!sig.spx.below,
     vixLast: +sig.vix.last,
     vixAbove: !!sig.vix.above,
-    tripwireArmed: !!(sig.tripwire && sig.tripwire.armed),
+    tripwireArmed: held === null ? wasArmed : held,
     brent: sig.tripwire ? +sig.tripwire.brent : null,
     usdinr: sig.tripwire ? +sig.tripwire.usdinr : null,
     fx: obs.fx
@@ -164,7 +169,9 @@ function evaluate(prev, obs, today) {
       push("tripwire", TRIPWIRE_TITLE,
         `Brent ${state.brent} > ${E.PARAMS.TRIP_BRENT} 且 USD/INR ${state.usdinr} > ${E.PARAMS.TRIP_USDINR},`
         + "兩條件同時成立。\n\n"
-        + "依規格需於**下次月檢裁決是否出場**。這是質性判斷,不會自動執行。");
+        + "依規格需於**下次月檢裁決是否出場**。這是質性判斷,不會自動執行。\n\n"
+        + `解除條件:Brent 跌破 ${E.PARAMS.TRIP_BRENT_OFF} 或 USD/INR 跌破 ${E.PARAMS.TRIP_USDINR_OFF}。`
+        + "在那之前即使掉回觸發門檻下也維持觸發,不會反覆開關。");
     } else {
       /* 解除不開新 Issue。原本會開第二則,結果列表留下一對永遠開著的 Issue,
          而「要不要出場」那個裁決從來沒被記錄下來。改成留言在觸發那則並關閉它:
@@ -172,8 +179,9 @@ function evaluate(prev, obs, today) {
          找不到就什麼都不做——你沒看到的觸發,它的解除不是新聞。 */
       closes.push({
         title: TRIPWIRE_TITLE,
-        detail: `Brent ${state.brent} · USD/INR ${state.usdinr},已不再同時滿足觸發條件`
-          + `(門檻 ${E.PARAMS.TRIP_BRENT} / ${E.PARAMS.TRIP_USDINR})。\n\n`
+        detail: `Brent ${state.brent} · USD/INR ${state.usdinr},已跌破解除門檻`
+          + `(Brent ${E.PARAMS.TRIP_BRENT_OFF} / USD/INR ${E.PARAMS.TRIP_USDINR_OFF},`
+          + `觸發門檻為 ${E.PARAMS.TRIP_BRENT} / ${E.PARAMS.TRIP_USDINR})。\n\n`
           + "本則自動關閉。若你已在月檢裁決出場請自行記錄;未裁決則視為條件自行解除。"
       });
     }

@@ -149,7 +149,52 @@ describe("監控 · 00653L 扳機", () => {
     a.strictEqual(r.closes.length, 1, "應該要關掉一則");
     a.strictEqual(r.closes[0].title, TRIPWIRE_TITLE,
       "標題必須與觸發那則完全相同,否則 workflow 找不回來");
-    a.match(r.closes[0].detail, /不再同時滿足/);
+    a.match(r.closes[0].detail, /跌破解除門檻/);
+  });
+
+  it("遲滯:觸發後掉回 96 下但仍在緩衝帶內,不關 Issue", (a) => {
+    const armed = sig({ tripwire: { brent: 104.25, usdinr: 96.72, armed: true } });
+    const prev = evaluate(null, obs(armed), TODAY).state;
+    const dip = sig({ tripwire: { brent: 106.69, usdinr: 95.76, armed: false } });
+    const r = evaluate(prev, obs(dip), TODAY);
+    a.deepStrictEqual(r.closes, [], "仍在緩衝帶內不可解除");
+    a.deepStrictEqual(levels(r), []);
+    a.strictEqual(r.state.tripwireArmed, true, "心跳要記住維持中的觸發狀態");
+  });
+
+  it("遲滯:重播 2026-10 的實際序列,只會開一則、關一則", (a) => {
+    /* docs/AUDIT-2026-10-14.md 的實際觀測。沒有遲滯時 10-12 就解除了(Issue #2)。 */
+    const days = [
+      [101.23, 95.94, false], [99.86, 95.97, false], [100.96, 96.31, true],
+      [101.48, 96.77, true], [104.25, 96.72, true], [106.69, 95.76, false],
+      [105.77, 95.27, false]
+    ];
+    let prev = null, opened = 0, closed = 0;
+    const armedOn = [];
+    for (const [brent, usdinr, armed] of days) {
+      const r = evaluate(prev, obs(sig({ tripwire: { brent, usdinr, armed } })), TODAY);
+      if (prev) { opened += levels(r).filter(l => l === "tripwire").length; closed += r.closes.length; }
+      armedOn.push(r.state.tripwireArmed);
+      prev = r.state;
+    }
+    a.deepStrictEqual(armedOn, [false, false, true, true, true, true, false]);
+    a.strictEqual(opened, 1);
+    a.strictEqual(closed, 1, "10-12 的 95.76 不解除,10-13 的 95.27 才解除");
+  });
+
+  it("遲滯:從未觸發時,緩衝帶內不算觸發", (a) => {
+    const prev = evaluate(null, obs(sig()), TODAY).state;
+    const near = sig({ tripwire: { brent: 101, usdinr: 95.9, armed: false } });
+    const r = evaluate(prev, obs(near), TODAY);
+    a.strictEqual(r.state.tripwireArmed, false);
+    a.ok(!levels(r).includes("tripwire"));
+  });
+
+  it("觸發通知要寫出解除條件", (a) => {
+    const armed = sig({ tripwire: { brent: 92.1, usdinr: 96.8, armed: true } });
+    const d = evaluate(evaluate(null, obs(sig()), TODAY).state, obs(armed), TODAY)
+      .alerts.find(x => x.level === "tripwire").detail;
+    a.match(d, new RegExp("跌破 " + E.PARAMS.TRIP_USDINR_OFF));
   });
 
   it("觸發與解除指向同一個標題", (a) => {

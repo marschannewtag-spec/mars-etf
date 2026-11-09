@@ -49,7 +49,7 @@ node tools/serve.js . 8777    # 本機開頁面 → http://localhost:8777
 
 `.github/workflows/ci.yml` 在每次 push(心跳除外)與 PR 執行四道關卡:
 
-1. 引擎測試(275 項離線)
+1. 引擎測試(282 項離線)
 2. `engine.json` 與 `engine.js` 的 PARAMS 同步檢查
 3. `index.html` 內嵌 script 語法檢查
 4. 確認 index.html 仍引用共用引擎、`.nojekyll` 仍在
@@ -101,6 +101,7 @@ CI 是「壞掉的引擎」與「上線」之間唯一的關卡:index.html 由 P
 | LADDER | -40%→10%, -50%→5% | 分層抄底階梯 |
 | REARM | 5% | 回補遲滯 |
 | TRIP_BRENT / TRIP_USDINR | 90 / 96 | 00653L 出場扳機門檻(嚴格大於) |
+| TRIP_BRENT_OFF / TRIP_USDINR_OFF | 88 / 95.5 | 扳機解除門檻:觸發後任一條件跌破才解除 |
 
 三條決策路徑:
 
@@ -147,7 +148,7 @@ CI 是「壞掉的引擎」與「上線」之間唯一的關卡:index.html 由 P
 - **券商貼上只認得 0 開頭的代碼**。`parseBrokerPaste` 的 `unknown` 用 `/\b0\d{3,5}[A-Za-z]?\b/` 認代碼,所以 2330 這類個股認不出來——它和四位數的股數在形狀上無從分辨。原本用 `\d{4,5}`,結果把「2000」「67500」都報成代碼(逗號被 OCR 吃掉時必然發生)又漏掉六位數的 006208。**假警報比漏報更糟**:會讓人學會忽略那條訊息。
 - **Worker 網址存在 localStorage**。改程式碼裡的預設值不影響已在用的裝置,需手動至設定頁修改。
 - **自動分配的最小交易門檻與引擎相同(0.5%)**。原本是裸數字 0.2%,且低於門檻時仍把目標股數寫進持倉——等於悄悄改紀錄卻不叫你下單。現在低於門檻連紀錄一起不動。
-- **扳機沒有遲滯**。分層抄底有 `REARM`,扳機沒有:九月 INR 整月貼著 96、十月初越過又掉回來,開了成對 Issue。遲滯是策略決策,留待獨立變更;門檻已在 `PARAMS`,由契約測試以 `tripwireArmed` 複核 Worker。
+- **扳機的遲滯只在本 repo 這一側**。觸發仍是 Brent > 90 且 INR > 96(以 Worker 的 `armed` 為準);觸發之後要 Brent < 88 或 INR < 95.5 才解除(`tripwireHeld`)。原本沒有遲滯:十月 INR 在 96 上下來回,10-12 掉到 95.76 就解除並開了第二則 Issue。Worker 的 `armed` 仍是無狀態的,契約測試照舊以 `tripwireArmed` 複核觸發條件;「上次是否已觸發」存在每日監控的心跳 `tripwireArmed`,網頁從同網域的 `monitor/heartbeat.json` 讀它,讀不到就退回無遲滯的判斷。資料不足(`null`)時保留前次狀態,不當成解除。
 
 ## 回測資料 D_RETS
 

@@ -24,6 +24,8 @@
     "SMA_MONTHS": 12,
     "TRIP_BRENT": 90,
     "TRIP_USDINR": 96,
+    "TRIP_BRENT_OFF": 88,
+    "TRIP_USDINR_OFF": 95.5,
     "MIN_TRADE_FRACTION": 0.005,
     "CASH_EPS": 0.001
   }

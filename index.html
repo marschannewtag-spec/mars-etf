@@ -605,7 +605,7 @@ function setVerdict(big,sub,tone){
 function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(function(){t.style.display="none"},2800)}
 const save=function(){localStorage.setItem("etf2x",JSON.stringify(S))};
 const log=function(m){S.log.unshift(new Date().toISOString().slice(0,16).replace("T"," ")+" · "+m);S.log=S.log.slice(0,500);save();renderLog()};
-let Q={px:{},fx:null,sig:null};
+let Q={px:{},fx:null,sig:null,hb:null};
 /* tabs。換頁連結不只在 nav 裡(設定頁底部有一條通往「更多」),
    所以綁在 [data-v] 上。「更多」沒有自己的頁籤,高亮留給「設定」。 */
 function go(v){
@@ -709,6 +709,12 @@ async function fetchPx(i){
   const y=await j("/quotes?symbols="+id);
   return sanad(+y[i.id].last[1]);
 }
+/* 扳機遲滯要知道「上次是否已觸發」,那是每日監控的心跳(同網域、只含市場資料)。
+   拿不到就回 null,當作未觸發,退回無遲滯的原始判斷,不擋任何東西。 */
+function fetchHb(){
+  return fetch("monitor/heartbeat.json",{signal:AbortSignal.timeout(15000),cache:"no-store"})
+    .then(function(r){return r.ok?r.json():null}).then(null,function(){return null});
+}
 async function fetchAll(){
   /* 全部並行:序列版 8 個請求約 825ms,並行約 110ms(實測 Worker 無限流)。
      只有 /signal 保留 reject 讓上層顯示原始 HTTP 錯誤;
@@ -717,11 +723,13 @@ async function fetchAll(){
   const res=await Promise.all([
     j("/signal"),
     j("/fx").then(function(d){return sanad(d&&d.last&&d.last[1])},function(){return null}),
+    fetchHb(),
   ].concat(list.map(function(i){return fetchPx(i).then(null,function(){return null})})));
   Q.sig=res[0];
   Q.fx=res[1];
+  Q.hb=res[2];
   /* 重建整份報價表,避免已刪除標的的舊價殘留 */
-  const px={};list.forEach(function(i,ix){px[i.id]=res[ix+2]});
+  const px={};list.forEach(function(i,ix){px[i.id]=res[ix+3]});
   Q.px=px;
 }
 /* 以下皆為共用引擎的薄包裝:把本檔的可變狀態(S / Q)組成引擎要的 ctx */
@@ -797,8 +805,13 @@ function render(mutate){
   $("vFX").textContent=fin(Q.fx)?Q.fx.toFixed(3):"—";
   if(s.tripwire&&s.tripwire.brent!=null){
     const tp=s.tripwire;
-    $("vTrip").innerHTML="B "+esc(tp.brent)+" · INR "+esc(tp.usdinr)+(tp.armed?' <span class="neg">●</span>':' <span class="pos">○</span>');
-    $("vTripSub").textContent=tp.armed?"觸發!下次月檢裁決出場":"Brent>"+P.TRIP_BRENT+" 且 INR>"+P.TRIP_USDINR;
+    const was=!!(Q.hb&&Q.hb.tripwireArmed===true);
+    const hd=EG.tripwireHeld(was,s);
+    const on=hd===null?was:hd;
+    $("vTrip").innerHTML="B "+esc(tp.brent)+" · INR "+esc(tp.usdinr)+(on?' <span class="neg">●</span>':' <span class="pos">○</span>');
+    $("vTripSub").textContent=!on?"Brent>"+P.TRIP_BRENT+" 且 INR>"+P.TRIP_USDINR
+      :tp.armed?"觸發!下次月檢裁決出場"
+      :"緩衝帶內,仍視為觸發(Brent<"+P.TRIP_BRENT_OFF+" 或 INR<"+P.TRIP_USDINR_OFF+" 才解除)";
   }else{$("vTrip").textContent="資料暫缺";}
   /* 持倉頁 */
   let coreV=0,satV=0;
@@ -1334,8 +1347,10 @@ document.addEventListener("change",function(e){
 (async function(){
   try{
     /* 與 fetchAll 一致:/fx 回應缺 last 欄位時降為 null,不要整段開機失敗 */
+    const hbP=fetchHb();
     Q.sig=await j("/signal");
     Q.fx=await j("/fx").then(function(d){return sanad(d&&d.last&&d.last[1])},function(){return null});
+    Q.hb=await hbP;
     const sigErr=sigBad(Q.sig);
     /* 燈號由 render 依 sigBad 自行 fail closed,這裡只補上具體原因 */
     if(sigErr){render(false);setVerdict("市場訊號無效",sigErr,"bad");return}

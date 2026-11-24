@@ -185,6 +185,13 @@ Cloudflare Worker(預設 `green-term-c0ddetf2x-worker.marschannewtag.workers.dev
 
 Worker 自行計算 `risk_flag` / `below` / `above` / `armed`,契約測試用 `engine.js` 獨立重算比對,不一致即代表某一端有問題。**Worker 歷史深度只到 2023-08**,`/signal` 不提供歷史序列。
 
+## 維護規則(本人指定,2026-11-24)
+
+- **每到一個段落就用 `/graphify` 留紀錄。** 使用前先讀 `~/.claude/skills/graphify/SKILL.md`,不要假設它的行為;這台機器沒裝就明說沒做。
+- **紀錄留在本機專案資料夾**:`.notes/`(由 `.git/info/exclude` 排除,不進公開 repo)。工作日誌是 `.notes/JOURNAL.md`,只增不改。
+- **零幻覺**:每一句事實附證據(指令與輸出、commit hash、`檔案:行號`);數字寫進紀錄前當場重跑;沒驗證的寫「未驗證」。
+- **與 Codex 協作的設計在 `.notes/PLAN-codex-collab.md`,尚未實施**,本人說開工才動。
+
 ## 注意
 
 **這個 repo 是公開的。** 若要放入實際持倉(`state.json`),必須先改為私有——但那會讓 Pages 停機(見「每日監控」)。

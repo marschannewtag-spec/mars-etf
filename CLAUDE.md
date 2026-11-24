@@ -2,6 +2,9 @@
 
 台股 2 倍槓桿 ETF 的配置決策台。三層攻守引擎:趨勢(SPX vs 12 月均線)× 波動(VIX 32)× 分層抄底。
 
+> **接手這個專案:先讀 `docs/PICKUP.md`**(現在停在哪裡、該先做什麼),再回來讀這一份。
+> 架構在 `docs/ARCHITECTURE.md`,換機器在 `docs/HANDOVER.md`,Codex 的作業契約在 `AGENTS.md`。
+
 ## 結構
 
 ```
@@ -188,7 +191,9 @@ Worker 自行計算 `risk_flag` / `below` / `above` / `armed`,契約測試用 `e
 ## 維護規則(本人指定,2026-11-24)
 
 - **每到一個段落就用 `/graphify` 留紀錄。** 使用前先讀 `~/.claude/skills/graphify/SKILL.md`,不要假設它的行為;這台機器沒裝就明說沒做。
-- **紀錄留在本機專案資料夾**:`.notes/`(由 `.git/info/exclude` 排除,不進公開 repo)。工作日誌是 `.notes/JOURNAL.md`,只增不改。
+- **知識圖譜進 repo**(2026-11-24 改):`graphify-out/graph.json`、`GRAPH_REPORT.md`、`graph.html` 納入版控,因為換機器接手的人要載得到它。圖譜的來源只有程式碼與 `docs/`,**不含持倉**,所以放公開 repo 是安全的——但每次推之前要掃一遍(持倉數字、絕對路徑、使用者名稱)。
+  `graphify-out/` 其餘的東西**一律不進版控**:`.graphify_python` 與 `.graphify_root` 存的是本機絕對路徑(含使用者名稱),`cache/` 與 `cost.json` 是本機抽取快取與 token 帳。`.gitignore` 用白名單擋住這件事。
+- **工作日誌留在本機**:`.notes/JOURNAL.md`,只增不改。它會帶到持倉、金額與本機路徑,所以由 `.gitignore` 排除,**絕不進公開 repo**。圖譜講架構、日誌講當天發生什麼事,兩者分開處理。
 - **零幻覺**:每一句事實附證據(指令與輸出、commit hash、`檔案:行號`);數字寫進紀錄前當場重跑;沒驗證的寫「未驗證」。
 - **與 Codex 協作的設計在 `.notes/PLAN-codex-collab.md`,尚未實施**,本人說開工才動。
 

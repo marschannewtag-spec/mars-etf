@@ -1,3 +1,13 @@
 monitor/result.json
 .taste-skill/
 .claude/settings.local.json
+
+# 知識圖譜:只有這三個產出進版控(見 CLAUDE.md 維護規則)。
+# 其餘含本機絕對路徑與使用者名稱,或是本機快取。
+graphify-out/*
+!graphify-out/graph.json
+!graphify-out/GRAPH_REPORT.md
+!graphify-out/graph.html
+
+# 工作日誌會帶到持倉與金額,絕不進公開 repo。
+.notes/

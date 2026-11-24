@@ -69,9 +69,9 @@ node test/run.js    282 通過
 ## 3. 模組地圖
 
 ```
-index.html          1,400 行上下。取資料、存狀態、呈現。不含決策邏輯。
+index.html          1,368 行。取資料、存狀態、呈現。不含決策邏輯。
 engine/
-  engine.js         1,060 行。37 個函式。純函式,無 DOM / 無網路 / 無 localStorage。
+  engine.js         1,077 行。37 個函式。純函式,無 DOM / 無網路 / 無 localStorage。
   engine.json       由 dump-params.js 產生的機器可讀規格。勿手動編輯。
   dump-params.js    產生 engine.json
 data/
@@ -137,10 +137,10 @@ docs/               稽核、UI 檢討、搬機交接、本檔
 
 ---
 
-## 5. engine.js:37 個函式
+## 5. engine.js 的 37 個函式
 
 純函式。沒有 DOM、沒有網路、沒有 localStorage。UMD 包裝,瀏覽器掛 `window.EG`,
-Node 走 `module.exports`。匯出清單在 `engine.js:1047-1059`。
+Node 走 `module.exports`。匯出清單在 `engine.js:1063-1075`。
 
 ### 5.1 工具層
 
@@ -220,9 +220,9 @@ Node 走 `module.exports`。匯出清單在 `engine.js:1047-1059`。
 
 ```
 0. 權重合計為 0            → hold「請至設定頁填入目標權重」
-                              engine.js:538
+                              engine.js:540
 
-1. 風險期(st.risk)       → engine.js:546
+1. 風險期(st.risk)       → engine.js:544
      現金 < DEF - CASH_EPS
        無持股              → hold「維持空手等待旗標熄滅」
        有持股              → trim,賣出 min(DEF×V - cash, CAP×hold)
@@ -252,7 +252,7 @@ Node 走 `module.exports`。匯出清單在 `engine.js:1047-1059`。
 
 ---
 
-## 7. PARAMS(唯一真相,engine.js:20-66)
+## 7. PARAMS(唯一真相,engine.js:36-65)
 
 ```
 BASE               0.20      基準現金水位
@@ -322,7 +322,7 @@ vixLast vixAbove tripwireArmed brent usdinr fx
 
 ---
 
-## 9. index.html:36 個函式,四個頁面
+## 9. index.html 的 36 個函式,四個頁面
 
 ```
 #view-today   本月檢查。一句話結論 + 訂單 + 市場快照
@@ -362,7 +362,7 @@ CI 第 4 關抓不到「有沒有偷偷重寫引擎」,所以 `guards.test.js` �
 
 ---
 
-## 10. monitor/check.js:11 個函式
+## 10. monitor/check.js 的 11 個函式
 
 ```
 taipeiNow(40) taipeiToday(43)     台北時間。用 UTC 會在凌晨差一天

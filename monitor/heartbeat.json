@@ -1,14 +1,14 @@
 {
-  "checkedAt": "2026-11-27 02:28",
-  "asof": "2026-11-25",
-  "riskFlag": true,
-  "spxLast": 7182.7798,
-  "spxSma12m": 7255.88,
-  "spxBelow": true,
-  "vixLast": 26.8,
+  "checkedAt": "2026-11-28 02:15",
+  "asof": "2026-11-27",
+  "riskFlag": false,
+  "spxLast": 7297.4902,
+  "spxSma12m": 7265.44,
+  "spxBelow": false,
+  "vixLast": 23.99,
   "vixAbove": false,
   "tripwireArmed": false,
-  "brent": 91.41,
-  "usdinr": 92.44,
-  "fx": 32.942
+  "brent": 90.18,
+  "usdinr": 92.98,
+  "fx": 32.964
 }
